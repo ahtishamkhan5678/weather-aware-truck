@@ -16,7 +16,7 @@ export function ForecastControls() {
   const visible = usePlanner((s) => s.heatmapVisible)
   const playing = usePlanner((s) => s.playing)
   const route = usePlanner(selectRoute)
-  const { setHour, setLayer, toggleHeatmap, setPlaying } = usePlanner.getState()
+  const { setHour, setLayer, toggleHeatmap, setPlaying, retryHeatmap } = usePlanner.getState()
 
   useEffect(() => {
     if (!playing) return
@@ -61,7 +61,14 @@ export function ForecastControls() {
           <span className="spinner spinner--sm" /> Building 48-hour corridor forecast…
         </div>
       )}
-      {status === 'error' && <div className="forecast__status is-error">{error}</div>}
+      {status === 'error' && (
+        <div className="forecast__status is-error" role="alert">
+          {error}
+          <button type="button" className="ghost" onClick={retryHeatmap}>
+            Retry
+          </button>
+        </div>
+      )}
 
       {heatmap && time && (
         <>
@@ -71,7 +78,7 @@ export function ForecastControls() {
             </button>
             <div className="forecast__time">
               <strong>{fmt.dateTime(time)}</strong>
-              <span>+{hour} h</span>
+              <span>{hour === 0 ? 'Departure' : `Departure +${hour} h`}</span>
             </div>
             <div className="slider">
               {tripWindow && <span className="slider__trip" style={{ left: `${tripWindow.left}%`, width: `${tripWindow.width}%` }} title="Selected route on the road" />}
@@ -83,7 +90,7 @@ export function ForecastControls() {
                 value={hour}
                 onChange={(e) => setHour(e.target.valueAsNumber)}
                 aria-label="Forecast hour"
-                aria-valuetext={`${fmt.dateTime(time)}, plus ${hour} hours`}
+                aria-valuetext={`${fmt.dateTime(time)}, ${hour} hours after departure`}
               />
               <div className="slider__ticks" aria-hidden>
                 {[0, 12, 24, 36, 48].map((h) => (

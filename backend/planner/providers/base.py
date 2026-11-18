@@ -19,6 +19,14 @@ class ProviderError(Exception):
         self.retryable = retryable
 
 
+class RateLimited(ProviderError):
+    """The upstream's free quota is exhausted for now; the client should retry later."""
+
+    def __init__(self, message: str, *, provider: str, retry_after_s: int = 60) -> None:
+        super().__init__(message, provider=provider, retryable=True)
+        self.retry_after_s = retry_after_s
+
+
 class NoRouteFound(ProviderError):
     def __init__(self, message: str, *, provider: str) -> None:
         super().__init__(message, provider=provider, retryable=False)

@@ -11,6 +11,7 @@ from ..domain.entities import LatLon, Route, TruckProfile
 from ..domain.geo import METERS_PER_MILE, decode_polyline, haversine_m
 from ._route_utils import distribute, main_roads, segment_lengths
 from .base import NoRouteFound, ProviderError
+from .http import CircuitBreaker, HostThrottle
 
 log = logging.getLogger(__name__)
 LB_TO_TONNES = 0.000453592
@@ -28,12 +29,20 @@ class ValhallaRoutingProvider:
         timeout_s: float = 25.0,
         max_distance_km: float = 1150.0,
         top_speed_kph: float = 105.0,
+        throttle: HostThrottle | None = None,
+        breaker: CircuitBreaker | None = None,
     ) -> None:
         self._session = session
         self._url = base_url.rstrip("/") + "/route"
         self._timeout = timeout_s
         self._max_distance_m = max_distance_km * 1000
         self._top_speed_kph = top_speed_kph
+        self._throttle = throttle
+        self._breaker = breaker
+
+    @property
+    def max_distance_m(self) -> float:
+        return self._max_distance_m
 
     def routes(
         self,
@@ -49,9 +58,28 @@ class ValhallaRoutingProvider:
             raise ProviderError(
                 "Trip exceeds Valhalla distance limit", provider=self.name, retryable=False
             )
-        locations = [{"lat": origin.lat, "lon": origin.lon, "type": "break"}]
-        locations += [{"lat": p.lat, "lon": p.lon, "type": "through"} for p in via]
-        locations.append({"lat": destination.lat, "lon": destination.lon, "type": "break"})
+        locations = [_loc(origin, "break")]
+        locations += [_loc(p, "through") for p in via]
+        locations.append(_loc(destination, "break"))
+        # Valhalla only supports alternates without via points.
+        return self._request(locations, truck, alternatives if not via else 0)
+
+    def leg(
+        self,
+        start: LatLon,
+        end: LatLon,
+        truck: TruckProfile,
+        *,
+        start_heading: float | None = None,
+        end_heading: float | None = None,
+    ) -> Route:
+        """One truck-routed leg. Headings keep chained legs flowing (no U-turns at joins)."""
+        locations = [_loc(start, "break", start_heading), _loc(end, "break", end_heading)]
+        return self._request(locations, truck, 0)[0]
+
+    def _request(
+        self, locations: list[dict], truck: TruckProfile, alternatives: int
+    ) -> list[Route]:
         body = {
             "locations": locations,
             "costing": "truck",
@@ -64,12 +92,20 @@ class ValhallaRoutingProvider:
             "units": "miles",
             "directions_type": "maneuvers",
         }
-        if alternatives and not via:  # Valhalla only supports alternates without vias
+        if alternatives:
             body["alternates"] = alternatives
+        if self._breaker and self._breaker.is_open:
+            raise ProviderError("Valhalla temporarily unavailable", provider=self.name)
+        if self._throttle:
+            self._throttle.wait()
         try:
             resp = self._session.post(self._url, json=body, timeout=self._timeout)
         except requests.RequestException as exc:
+            if self._breaker:
+                self._breaker.trip()
             raise ProviderError(f"Valhalla unreachable: {exc}", provider=self.name) from exc
+        if resp.status_code == 429 and self._breaker:
+            self._breaker.trip()
         data = _json(resp)
         if resp.status_code != 200:
             code = data.get("error_code")
@@ -116,6 +152,13 @@ class ValhallaRoutingProvider:
         return Route(
             tuple(points), tuple(distances), tuple(durations), main_roads(roads), self.name
         )
+
+
+def _loc(p: LatLon, kind: str, heading: float | None = None) -> dict:
+    loc: dict = {"lat": p.lat, "lon": p.lon, "type": kind}
+    if heading is not None:
+        loc.update({"heading": round(heading) % 360, "heading_tolerance": 60})
+    return loc
 
 
 def _json(resp: requests.Response) -> dict:

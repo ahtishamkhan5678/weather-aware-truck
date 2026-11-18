@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Sequence
-from concurrent.futures import ThreadPoolExecutor
 
 from ..domain.entities import LatLon, Route, TruckProfile
 from ..domain.geo import (
@@ -34,7 +33,7 @@ class AlternativeRouteService:
         *,
         count: int = 3,
         max_overlap: float = 0.85,
-        offsets: Sequence[float] = (0.12, -0.12, 0.25, -0.25),
+        offsets: Sequence[float] = (0.12, -0.12, 0.25, -0.25, 0.4, -0.4),
         overlap_buffer_m: float = 1500.0,
     ) -> None:
         if not providers:
@@ -72,17 +71,14 @@ class AlternativeRouteService:
         if len(distinct) >= self._count:
             return distinct[: self._count]
 
-        vias = self._via_points(origin, destination)
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            futures = [
-                pool.submit(self._safe_route, provider, origin, destination, truck, v) for v in vias
-            ]
-            for f in futures:
-                route = f.result()
-                if route is not None:
-                    self._add_if_distinct(distinct, route)
-                if len(distinct) >= self._count:
-                    break
+        # Sequential on purpose: public routing servers allow ~1 request/second, and we
+        # stop as soon as enough distinct options exist.
+        for via in self._via_points(origin, destination):
+            route = self._safe_route(provider, origin, destination, truck, via)
+            if route is not None:
+                self._add_if_distinct(distinct, route)
+            if len(distinct) >= self._count:
+                break
         # Keep the engine's primary route first, then the shortest-duration alternatives.
         head, tail = distinct[:1], sorted(distinct[1:], key=lambda r: r.duration_s)
         return (head + tail)[: self._count]

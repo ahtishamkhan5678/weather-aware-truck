@@ -110,3 +110,29 @@ def test_rules_and_geocode(client):
     res = client.get("/api/geocode", {"q": "Dallas"})
     assert res.json()["results"][0]["lat"] == 32.7
     assert client.get("/api/geocode", {"q": "D"}).status_code == 400
+
+
+def test_rate_limit_returns_503_with_retry_after(client, monkeypatch):
+    from planner.providers.base import RateLimited
+
+    class Limited:
+        def plan(self, req):
+            raise RateLimited("busy", provider="open-meteo")
+
+    monkeypatch.setattr(container, "trip_planner", lambda: Limited())
+    res = client.post("/api/plan", plan_body(), format="json")
+    assert res.status_code == 503
+    assert res.json()["error"]["code"] == "rate_limited"
+    assert res["Retry-After"] == "60"
+
+
+def test_heatmap_starts_at_departure(client):
+    line = [[-100.0, 35.0], [-99.0, 35.2]]
+    dep = (datetime.now(UTC) + timedelta(hours=5)).replace(minute=0, second=0, microsecond=0)
+    res = client.post(
+        "/api/heatmap",
+        {"routes": [line], "load_weight_lb": 1000, "departure_time": dep.isoformat()},
+        format="json",
+    )
+    assert res.status_code == 200
+    assert res.json()["start"] == dep.isoformat().replace("+00:00", "Z")

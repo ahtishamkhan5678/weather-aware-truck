@@ -38,7 +38,11 @@ from ..providers.base import WeatherProvider
 
 log = logging.getLogger(__name__)
 
-WEATHER_SNAP_DEG = 0.05  # ≈ 5 km — at/below forecast-model resolution
+# Weather lookups snap checkpoints to a lattice to de-duplicate nearby points. The finest
+# step that keeps a plan within the weather budget is used: ~5 km for regional trips,
+# up to ~25 km (≈ global-model resolution) for cross-country trips at 10-mile sampling.
+WEATHER_SNAP_STEPS = (0.05, 0.1, 0.15, 0.2, 0.25)
+MAX_WEATHER_POINTS = 260
 FORECAST_HORIZON = timedelta(days=15)
 
 
@@ -103,15 +107,16 @@ class TripPlanner:
             raise PlanningError(
                 "This trip ends beyond the 15-day forecast horizon — choose an earlier departure."
             )
+        snap = choose_snap([p.point for tl in timelines for (p, _, _) in tl.stops])
         snapped = sorted(
-            {p.point.rounded(WEATHER_SNAP_DEG) for tl in timelines for (p, _, _) in tl.stops},
+            {p.point.rounded(snap) for tl in timelines for (p, _, _) in tl.stops},
             key=lambda q: (q.lat, q.lon),
         )
         series = dict(zip(snapped, self._weather.hourly(snapped, start, end), strict=True))
 
         # 3) Assess, aggregate, rank.
         analyses = [
-            self._analyse(route_id, tl, series, req)
+            self._analyse(route_id, tl, series, req, snap)
             for route_id, tl in zip(string.ascii_uppercase, timelines, strict=False)
         ]
         ranking = self._ranker.rank(analyses)
@@ -150,11 +155,12 @@ class TripPlanner:
         tl: _Timeline,
         series: dict[LatLon, ForecastSeries],
         req: PlanRequest,
+        snap: float,
     ) -> RouteAnalysis:
         checkpoints: list[Checkpoint] = []
         miles: dict[RiskLevel, float] = defaultdict(float)
         for i, (pos, eta, _) in enumerate(tl.stops):
-            weather = series[pos.point.rounded(WEATHER_SNAP_DEG)].at(eta)
+            weather = series[pos.point.rounded(snap)].at(eta)
             risk = self._classifier.assess(weather, req.load_weight_lb)
             checkpoints.append(
                 Checkpoint(i, pos.point, pos.distance_m, eta, pos.represented_m, weather, risk)
@@ -170,6 +176,14 @@ class TripPlanner:
             rest_stops=tuple(self._eta.rest_stops(tl.driving_s)),
             miles_by_level={lvl: miles.get(lvl, 0.0) for lvl in RiskLevel},
         )
+
+
+def choose_snap(points: Sequence[LatLon]) -> float:
+    """Finest lattice step whose de-duplicated point count fits the weather budget."""
+    for step in WEATHER_SNAP_STEPS:
+        if len({p.rounded(step) for p in points}) <= MAX_WEATHER_POINTS:
+            return step
+    return WEATHER_SNAP_STEPS[-1]
 
 
 def route_lines(analyses: Sequence[RouteAnalysis]) -> list[list[LatLon]]:

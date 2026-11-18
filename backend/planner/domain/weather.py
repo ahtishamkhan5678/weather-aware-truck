@@ -62,6 +62,32 @@ class ForecastSeries:
             forecast_time=self.start + timedelta(hours=bucket),
         )
 
+    def window(self, start: datetime, end: datetime) -> ForecastSeries:
+        """Sub-series for whole hours ``start``…``end`` (inclusive), clamped to available data."""
+        i0 = max(0, int((start - self.start).total_seconds() // 3600))
+        i1 = min(self.hours - 1, int((end - self.start).total_seconds() // 3600))
+        return ForecastSeries(
+            self.point,
+            self.start + timedelta(hours=i0),
+            self.wind_mph[i0 : i1 + 1],
+            self.gust_mph[i0 : i1 + 1],
+            self.rain_in[i0 : i1 + 1],
+            self.snow_in[i0 : i1 + 1],
+        )
+
+    @staticmethod
+    def concat(parts: list[ForecastSeries]) -> ForecastSeries:
+        """Join consecutive series for the same point (e.g. cached day chunks)."""
+        first = parts[0]
+        return ForecastSeries(
+            first.point,
+            first.start,
+            tuple(v for p in parts for v in p.wind_mph),
+            tuple(v for p in parts for v in p.gust_mph),
+            tuple(v for p in parts for v in p.rain_in),
+            tuple(v for p in parts for v in p.snow_in),
+        )
+
     def hour(self, index: int) -> WeatherSample:
         return WeatherSample(
             wind_mph=self.wind_mph[index],

@@ -11,7 +11,7 @@ import requests
 
 from ..domain.entities import LatLon
 from ..domain.weather import ForecastSeries
-from .base import ProviderError
+from .base import ProviderError, RateLimited
 
 log = logging.getLogger(__name__)
 HOURLY_VARS = "wind_speed_10m,wind_gusts_10m,rain,showers,snowfall"
@@ -70,6 +70,11 @@ class OpenMeteoWeatherProvider:
             data = resp.json()
         except (requests.RequestException, ValueError) as exc:
             raise ProviderError(f"Weather service unreachable: {exc}", provider=self.name) from exc
+        if resp.status_code == 429:
+            raise RateLimited(
+                "The free weather quota is busy right now. Please retry in about a minute.",
+                provider=self.name,
+            )
         if resp.status_code != 200 or (isinstance(data, dict) and data.get("error")):
             reason = (
                 data.get("reason", resp.status_code) if isinstance(data, dict) else resp.status_code

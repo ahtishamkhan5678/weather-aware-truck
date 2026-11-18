@@ -43,10 +43,10 @@ export const api = {
   plan: (payload: PlanRequest, signal?: AbortSignal) =>
     request<PlanResponse>('/plan', { method: 'POST', body: JSON.stringify(payload), signal }),
 
-  heatmap: (routes: [number, number][][], loadWeightLb: number, signal?: AbortSignal) =>
+  heatmap: (routes: [number, number][][], loadWeightLb: number, departureTime: string, signal?: AbortSignal) =>
     request<HeatmapResponse>('/heatmap', {
       method: 'POST',
-      body: JSON.stringify({ routes, load_weight_lb: loadWeightLb }),
+      body: JSON.stringify({ routes, load_weight_lb: loadWeightLb, departure_time: departureTime }),
       signal,
     }),
 

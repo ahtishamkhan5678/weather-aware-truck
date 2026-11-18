@@ -7,11 +7,13 @@ from functools import lru_cache
 from django.conf import settings
 from django.core.cache import cache
 
+from ..domain.corridor import CorridorGridBuilder
 from ..domain.eta import HoursOfService, TruckEtaModel
 from ..domain.ranking import RouteRanker
 from ..domain.risk import DEFAULT_POLICY, RiskClassifier
 from ..providers.cache import CachedRouteFinder, CachedWeatherProvider
-from ..providers.http import build_session
+from ..providers.http import CircuitBreaker, HostThrottle, build_session
+from ..providers.long_haul import ChainedTruckRoutingProvider
 from ..providers.open_meteo import OpenMeteoWeatherProvider
 from ..providers.osrm import OsrmRoutingProvider
 from ..providers.photon import PhotonGeocoder
@@ -46,16 +48,24 @@ def weather_provider():
 @lru_cache(maxsize=1)
 def trip_planner() -> TripPlanner:
     cfg = settings.PLANNER
-    providers = [
-        ValhallaRoutingProvider(
-            _session(),
-            cfg["VALHALLA_BASE_URL"],
-            timeout_s=cfg["HTTP_TIMEOUT_S"],
-            max_distance_km=cfg["VALHALLA_MAX_KM"],
-            top_speed_kph=cfg["TRUCK_MAX_SPEED_MPH"] * 1.609344,
-        ),
-        OsrmRoutingProvider(_session(), cfg["OSRM_BASE_URL"], timeout_s=cfg["HTTP_TIMEOUT_S"]),
-    ]
+    valhalla = ValhallaRoutingProvider(
+        _session(),
+        cfg["VALHALLA_BASE_URL"],
+        timeout_s=cfg["HTTP_TIMEOUT_S"],
+        max_distance_km=cfg["VALHALLA_MAX_KM"],
+        top_speed_kph=cfg["TRUCK_MAX_SPEED_MPH"] * 1.609344,
+        throttle=HostThrottle(cfg["VALHALLA_MIN_INTERVAL_S"]),
+        breaker=CircuitBreaker(cooldown_s=300),
+    )
+    osrm = OsrmRoutingProvider(
+        _session(),
+        cfg["OSRM_BASE_URL"],
+        timeout_s=cfg["HTTP_TIMEOUT_S"],
+        throttle=HostThrottle(cfg["OSRM_MIN_INTERVAL_S"]),
+    )
+    # Truck routing for every trip length (long trips: OSRM corridor → truck-routed legs);
+    # plain OSRM only if the truck engine is unavailable.
+    providers = [ChainedTruckRoutingProvider(valhalla, osrm), osrm]
     finder = CachedRouteFinder(
         AlternativeRouteService(providers, count=cfg["ROUTE_OPTIONS"]),
         cache,
@@ -77,7 +87,11 @@ def trip_planner() -> TripPlanner:
 
 @lru_cache(maxsize=1)
 def heatmap_service() -> HeatmapService:
-    return HeatmapService(weather_provider(), classifier())
+    return HeatmapService(
+        weather_provider(),
+        classifier(),
+        CorridorGridBuilder(max_active_nodes=settings.PLANNER["HEATMAP_MAX_NODES"]),
+    )
 
 
 @lru_cache(maxsize=1)

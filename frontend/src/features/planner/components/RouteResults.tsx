@@ -63,7 +63,8 @@ function RouteCard({ route: r, selected, onSelect }: { route: RouteDTO; selected
         <div className="route-card__name">
           <strong>{r.roads.slice(0, 3).join(' · ') || `Route ${r.id}`}</strong>
           <small>
-            #{r.rank} of 3 · via {r.provider === 'valhalla' ? 'truck routing' : 'road routing'}
+            #{r.rank} of 3 ·{' '}
+            {r.provider === 'valhalla' ? 'truck routing (weight-aware)' : 'road routing — truck engine unavailable'}
           </small>
         </div>
         {r.recommended && <span className="badge">Best</span>}

@@ -103,6 +103,7 @@ export function MapView() {
     ])
     map.setPaintProperty('checkpoint-dots', 'circle-opacity', ['case', ['==', ['get', 'route'], sel], 1, 0.45])
     map.setPaintProperty('checkpoint-dots', 'circle-stroke-opacity', ['case', ['==', ['get', 'route'], sel], 1, 0.4])
+    map.setFilter('checkpoint-eta', ['==', ['get', 'route'], sel])
     const route = plan?.routes.find((r) => r.id === sel)
     ;(map.getSource('risk-segments') as GeoJSONSource).setData(route ? segmentsFC(route) : EMPTY)
     markers.current.forEach((m) => {
@@ -215,6 +216,22 @@ function addLayers(map: MLMap) {
       'circle-stroke-width': 1.5,
     },
   })
+  // ETA printed beside every checkpoint of the selected route (collision-aware).
+  map.addLayer({
+    id: 'checkpoint-eta',
+    type: 'symbol',
+    source: 'checkpoints',
+    filter: ['==', ['get', 'route'], ''],
+    layout: {
+      'text-field': ['get', 'eta'],
+      'text-font': ['Montserrat SemiBold', 'Open Sans Bold', 'Noto Sans Regular'],
+      'text-size': 11,
+      'text-offset': [0.9, 0],
+      'text-anchor': 'left',
+      'text-optional': true,
+    },
+    paint: { 'text-color': '#f4f4f4', 'text-halo-color': '#000', 'text-halo-width': 1.6 },
+  })
   map.addLayer({
     id: 'endpoint-dots',
     type: 'circle',
@@ -298,7 +315,7 @@ function checkpointsFC(plan: PlanResponse): GeoJSON.FeatureCollection {
     features: plan.routes.flatMap((r) =>
       r.checkpoints.map((cp) => ({
         type: 'Feature' as const,
-        properties: { route: r.id, index: cp.index, level: cp.level },
+        properties: { route: r.id, index: cp.index, level: cp.level, eta: etaLabel(cp.eta, r.departure) },
         geometry: { type: 'Point' as const, coordinates: [cp.lon, cp.lat] },
       })),
     ),
@@ -339,6 +356,12 @@ function routeLabel(map: MLMap, r: RouteDTO, at: number): maplibregl.Marker {
   return new maplibregl.Marker({ element: el, anchor: 'bottom' })
     .setLngLat(pointAlong(r.geometry, at))
     .addTo(map)
+}
+
+/** "22:51", or "Thu 01:25" once the trip has crossed midnight since departure. */
+function etaLabel(eta: string, departure: string): string {
+  const sameDay = new Date(eta).toDateString() === new Date(departure).toDateString()
+  return sameDay ? fmt.time(eta) : fmt.dateTime(eta)
 }
 
 function esc(s: string): string {

@@ -67,7 +67,11 @@ class HeatmapView(APIView):
         s = HeatmapRequestSerializer(data=request.data)
         s.is_valid(raise_exception=True)
         routes = [[LatLon(lat, lon) for lon, lat in line] for line in s.validated_data["routes"]]
-        result = container.heatmap_service().build(routes, s.validated_data["load_weight_lb"])
+        result = container.heatmap_service().build(
+            routes,
+            s.validated_data["load_weight_lb"],
+            start_at=s.validated_data.get("departure_time"),
+        )
         return Response(presenters.heatmap(result))
 
 

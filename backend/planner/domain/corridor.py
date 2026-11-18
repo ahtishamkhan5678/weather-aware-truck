@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import itertools
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 
 from .entities import LatLon
-from .geo import METERS_PER_MILE, bounding_box, point_polyline_distance_m, simplify
+from .geo import METERS_PER_MILE, cumulative_distances, simplify
+
+M_PER_DEG = 111_320.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,56 +36,82 @@ class CorridorGrid:
 
 
 class CorridorGridBuilder:
-    """Builds a grid whose spacing adapts to the trip size and keeps only corridor nodes.
+    """Grid sized by the *corridor*, not the bounding box.
 
-    A node is kept if it lies within ``corridor_mi`` of any route *plus one grid diagonal*,
-    so bilinear interpolation inside the corridor always has its four neighbours.
+    The node budget (weather lookups) is spent only along the routes: the spacing is the
+    finest multiple of ``quantum_deg`` whose corridor fits ``max_active_nodes``. A
+    600-mile trip gets ~0.2° spacing; a 2,000-mile trip ~0.35° instead of the ~1° a
+    bounding-box grid would need. A node is active within ``corridor_mi`` of a route plus
+    ~¾ of a grid step, so bilinear interpolation inside the corridor always has data.
+    Nodes are found by rasterising the routes (cost ∝ route length, not map area), and
+    the lattice is aligned to the step so repeated searches reuse cached forecasts.
     """
 
     def __init__(
         self,
         corridor_mi: float = 30.0,
-        target_cells: int = 24,
         min_step_deg: float = 0.2,
-        max_active_nodes: int = 240,
+        quantum_deg: float = 0.05,
+        max_active_nodes: int = 280,
     ) -> None:
         self.corridor_m = corridor_mi * METERS_PER_MILE
-        self.target_cells = target_cells
-        self.min_step_deg = min_step_deg
-        self.max_active_nodes = max_active_nodes
+        self.min_step = min_step_deg
+        self.quantum = quantum_deg
+        self.budget = max_active_nodes
 
     def build(self, routes: Sequence[Sequence[LatLon]]) -> CorridorGrid:
         lines = [simplify(r, 1500.0) for r in routes if len(r) >= 2]
         if not lines:
             raise ValueError("At least one route is required")
-        all_points = [p for line in lines for p in line]
-        south, west, north, east = bounding_box(all_points)
-        mid_lat = math.radians((south + north) / 2)
-        pad_lat = self.corridor_m / 111_320
-        pad_lon = pad_lat / max(math.cos(mid_lat), 0.2)
-        south, north = south - pad_lat, north + pad_lat
-        west, east = west - pad_lon, east + pad_lon
-
-        span = max(north - south, (east - west) * math.cos(mid_lat))
-        step = max(self.min_step_deg, span / self.target_cells)
+        length = max(cumulative_distances(line)[-1] for line in lines)
+        area = length * 2 * self.corridor_m * min(len(lines), 2)  # alternatives overlap
+        step = max(self.min_step, math.sqrt(area / self.budget) / M_PER_DEG)
+        step = self._quantise(step)
         while True:
-            grid = self._grid(lines, south, west, north, east, step)
-            if len(grid.active) <= self.max_active_nodes:
+            grid = self._grid(lines, step)
+            if len(grid.active) <= self.budget:
                 return grid
-            step *= 1.15
+            step = self._quantise(step + self.quantum)
 
-    def _grid(self, lines, south, west, north, east, step) -> CorridorGrid:
-        # Snap the origin to the step so repeated searches reuse cached forecasts.
-        south = math.floor(south / step) * step
-        west = math.floor(west / step) * step
-        rows = math.ceil((north - south) / step) + 1
-        cols = math.ceil((east - west) / step) + 1
-        reach = self.corridor_m + step * 111_320 * math.sqrt(2)
-        active: list[int] = []
-        for row in range(rows):
-            lat = south + row * step
-            for col in range(cols):
-                p = LatLon(lat, west + col * step)
-                if any(point_polyline_distance_m(p, line) <= reach for line in lines):
-                    active.append(row * cols + col)
-        return CorridorGrid(south, west, step, rows, cols, tuple(active))
+    def _quantise(self, step: float) -> float:
+        return round(math.ceil(step / self.quantum - 1e-9) * self.quantum, 6)
+
+    def _grid(self, lines: list[list[LatLon]], step: float) -> CorridorGrid:
+        # Half a diagonal beyond the corridor is enough for every interior pixel to have
+        # its 4 interpolation neighbours (the renderer also tolerates missing nodes).
+        reach = self.corridor_m + step * M_PER_DEG * 0.75
+        marked: set[tuple[int, int]] = set()
+        for line in lines:
+            for p in _densify(line, step * M_PER_DEG / 3):
+                cos = max(math.cos(math.radians(p.lat)), 0.2)
+                r_lat = math.ceil(reach / (step * M_PER_DEG))
+                r_lon = math.ceil(reach / (step * M_PER_DEG * cos))
+                row0, col0 = round(p.lat / step), round(p.lon / step)
+                for dr in range(-r_lat, r_lat + 1):
+                    for dc in range(-r_lon, r_lon + 1):
+                        lat, lon = (row0 + dr) * step, (col0 + dc) * step
+                        dy = (lat - p.lat) * M_PER_DEG
+                        dx = (lon - p.lon) * M_PER_DEG * cos
+                        if dx * dx + dy * dy <= reach * reach:
+                            marked.add((row0 + dr, col0 + dc))
+        rmin = min(r for r, _ in marked)
+        cmin = min(c for _, c in marked)
+        rows = max(r for r, _ in marked) - rmin + 1
+        cols = max(c for _, c in marked) - cmin + 1
+        active = tuple(sorted((r - rmin) * cols + (c - cmin) for r, c in marked))
+        return CorridorGrid(round(rmin * step, 6), round(cmin * step, 6), step, rows, cols, active)
+
+
+def _densify(line: Sequence[LatLon], spacing_m: float) -> list[LatLon]:
+    out = [line[0]]
+    for a, b in itertools.pairwise(line):
+        d = math.hypot(
+            (b.lat - a.lat) * M_PER_DEG,
+            (b.lon - a.lon) * M_PER_DEG * math.cos(math.radians((a.lat + b.lat) / 2)),
+        )
+        n = max(1, math.ceil(d / spacing_m))
+        out.extend(
+            LatLon(a.lat + (b.lat - a.lat) * k / n, a.lon + (b.lon - a.lon) * k / n)
+            for k in range(1, n + 1)
+        )
+    return out

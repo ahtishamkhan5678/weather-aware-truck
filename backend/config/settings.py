@@ -123,6 +123,10 @@ PLANNER = {
     "VALHALLA_BASE_URL": os.environ.get("VALHALLA_BASE_URL", "https://valhalla1.openstreetmap.de"),
     # Public Valhalla rejects paths > 1,500 km; skip straight to OSRM beyond this.
     "VALHALLA_MAX_KM": float(os.environ.get("VALHALLA_MAX_KM", "1150")),
+    # Public FOSSGIS/OSRM demo servers: max 1 request/second per client (their usage policy).
+    # Set to 0 when pointing at a self-hosted engine.
+    "VALHALLA_MIN_INTERVAL_S": float(os.environ.get("VALHALLA_MIN_INTERVAL_S", "1.05")),
+    "OSRM_MIN_INTERVAL_S": float(os.environ.get("OSRM_MIN_INTERVAL_S", "1.05")),
     "OSRM_BASE_URL": os.environ.get("OSRM_BASE_URL", "https://router.project-osrm.org"),
     "PHOTON_BASE_URL": os.environ.get("PHOTON_BASE_URL", "https://photon.komoot.io"),
     "OPEN_METEO_BASE_URL": os.environ.get("OPEN_METEO_BASE_URL", "https://api.open-meteo.com"),
@@ -132,6 +136,9 @@ PLANNER = {
     "TRUCK_MAX_SPEED_MPH": float(os.environ.get("TRUCK_MAX_SPEED_MPH", "65")),
     "TRUCK_APPLY_HOS": _env_bool("TRUCK_APPLY_HOS", True),
     "ROUTE_OPTIONS": 3,
+    # Weather lookups per heatmap. 280 keeps plan + heatmap inside Open-Meteo's free
+    # 600 calls/minute; raise it (e.g. 1500) with an API key for a finer grid.
+    "HEATMAP_MAX_NODES": int(os.environ.get("HEATMAP_MAX_NODES", "280")),
     "WEATHER_CACHE_TTL_S": int(os.environ.get("WEATHER_CACHE_TTL_S", "1800")),
     "ROUTE_CACHE_TTL_S": int(os.environ.get("ROUTE_CACHE_TTL_S", "21600")),
 }

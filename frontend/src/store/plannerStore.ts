@@ -43,6 +43,7 @@ interface PlannerState {
   setLayer: (layer: HeatmapLayer) => void
   toggleHeatmap: () => void
   setPlaying: (playing: boolean) => void
+  retryHeatmap: () => void
 }
 
 let planAbort: AbortController | null = null
@@ -135,6 +136,12 @@ export const usePlanner = create<PlannerState>((set, get) => ({
   setLayer: (heatmapLayer) => set({ heatmapLayer, heatmapVisible: true }),
   toggleHeatmap: () => set((s) => ({ heatmapVisible: !s.heatmapVisible })),
   setPlaying: (playing) => set({ playing }),
+  retryHeatmap: () => {
+    const { plan } = get()
+    if (!plan) return
+    set({ heatmapStatus: 'loading', heatmapError: null })
+    void loadHeatmap(plan)
+  },
 }))
 
 async function loadHeatmap(plan: PlanResponse) {
@@ -144,14 +151,11 @@ async function loadHeatmap(plan: PlanResponse) {
     const heatmap = await api.heatmap(
       plan.routes.map((r) => downsample(r.geometry, 1500)),
       plan.load_weight_lb,
+      plan.departure_time,
       ctrl.signal,
     )
-    const offset = Math.round((Date.parse(plan.departure_time) - Date.parse(heatmap.start)) / 3_600_000)
-    usePlanner.setState({
-      heatmap,
-      heatmapStatus: 'ready',
-      hour: Math.max(0, Math.min(HEATMAP_MAX_HOUR, offset)),
-    })
+    // Hour 0 is the departure hour (the server starts the 48 h window there).
+    usePlanner.setState({ heatmap, heatmapStatus: 'ready', hour: 0 })
   } catch (err) {
     if ((err as Error).name === 'AbortError') return
     usePlanner.setState({

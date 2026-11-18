@@ -76,6 +76,7 @@ class HeatmapRequestSerializer(serializers.Serializer):
         child=CoordinateListField(min_length=2, max_length=10_000), min_length=1, max_length=3
     )
     load_weight_lb = serializers.FloatField(min_value=0, max_value=MAX_LOAD_LB)
+    departure_time = serializers.DateTimeField(required=False, default_timezone=UTC)
 
     def validate_routes(self, routes):
         for line in routes:

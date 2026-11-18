@@ -9,13 +9,22 @@ import requests
 from ..domain.entities import LatLon, Route, TruckProfile
 from ._route_utils import main_roads
 from .base import NoRouteFound, ProviderError
+from .http import HostThrottle
 
 
 class OsrmRoutingProvider:
     name = "osrm"
 
-    def __init__(self, session: requests.Session, base_url: str, *, timeout_s: float = 25.0):
+    def __init__(
+        self,
+        session: requests.Session,
+        base_url: str,
+        *,
+        timeout_s: float = 25.0,
+        throttle: HostThrottle | None = None,
+    ):
         self._session = session
+        self._throttle = throttle
         self._base = base_url.rstrip("/")
         self._timeout = timeout_s
 
@@ -36,6 +45,8 @@ class OsrmRoutingProvider:
             "annotations": "distance,duration",
             "steps": "true",
         }
+        if self._throttle:
+            self._throttle.wait()
         try:
             resp = self._session.get(
                 f"{self._base}/route/v1/driving/{coords}", params=params, timeout=self._timeout

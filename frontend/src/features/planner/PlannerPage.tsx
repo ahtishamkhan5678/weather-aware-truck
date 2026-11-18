@@ -11,6 +11,7 @@ import './planner.css'
 export default function PlannerPage() {
   const status = usePlanner((s) => s.status)
   const error = usePlanner((s) => s.error)
+  const planTrip = usePlanner((s) => s.planTrip)
 
   return (
     <div className="planner">
@@ -35,7 +36,10 @@ export default function PlannerPage() {
 
         {status === 'error' && (
           <div className="notice notice--error" role="alert">
-            {error}
+            <span>{error}</span>
+            <button type="button" className="ghost" onClick={() => void planTrip()}>
+              Try again
+            </button>
           </div>
         )}
         {status === 'loading' && <ResultsSkeleton />}

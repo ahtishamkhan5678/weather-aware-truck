@@ -9,7 +9,7 @@ from rest_framework.exceptions import APIException, ValidationError
 from rest_framework.response import Response
 from rest_framework.views import exception_handler
 
-from ..providers.base import NoRouteFound, ProviderError
+from ..providers.base import NoRouteFound, ProviderError, RateLimited
 from ..services.planner import PlanningError
 
 log = logging.getLogger(__name__)
@@ -35,6 +35,10 @@ def api_exception_handler(exc, context):
         return _error("no_route", message, status.HTTP_422_UNPROCESSABLE_ENTITY)
     if isinstance(exc, PlanningError):
         return _error("not_plannable", str(exc), status.HTTP_422_UNPROCESSABLE_ENTITY)
+    if isinstance(exc, RateLimited):
+        response = _error("rate_limited", str(exc), status.HTTP_503_SERVICE_UNAVAILABLE)
+        response["Retry-After"] = str(exc.retry_after_s)
+        return response
     if isinstance(exc, ProviderError):
         log.warning("upstream failure (%s): %s", exc.provider, exc)
         return _error(

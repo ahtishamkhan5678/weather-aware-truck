@@ -22,5 +22,9 @@ RUN DJANGO_SECRET_KEY=build python manage.py collectstatic --noinput >/dev/null 
 RUN useradd --create-home app && chown -R app /app
 USER app
 EXPOSE 8000
-# gthread workers: requests mostly wait on upstream APIs (I/O bound).
-CMD gunicorn config.wsgi:application --bind 0.0.0.0:${PORT} --workers 2 --threads 8 --worker-class gthread --timeout 90 --access-logfile -
+# ONE worker, many threads, deliberately:
+#  * requests mostly wait on upstream APIs (I/O bound), so threads scale fine;
+#  * the 1 req/s throttle for the public routing servers and the forecast cache are
+#    per-process — several workers would multiply the request rate (policy breach,
+#    IP ban) and split the cache. Scale out only with REDIS_URL + self-hosted engines.
+CMD gunicorn config.wsgi:application --bind 0.0.0.0:${PORT} --workers 1 --threads 16 --worker-class gthread --timeout 120 --access-logfile -

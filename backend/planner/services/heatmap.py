@@ -37,9 +37,16 @@ class HeatmapService:
         self._grid = grid_builder or CorridorGridBuilder()
         self._clock = clock
 
-    def build(self, routes: Sequence[Sequence[LatLon]], load_weight_lb: float) -> HeatmapResult:
+    def build(
+        self,
+        routes: Sequence[Sequence[LatLon]],
+        load_weight_lb: float,
+        start_at: datetime | None = None,
+    ) -> HeatmapResult:
+        """Hour 0 is the departure hour (or now, if departure is past/unspecified)."""
         grid = self._grid.build(routes)
-        start = floor_hour(self._clock())
+        now = floor_hour(self._clock())
+        start = max(now, floor_hour(start_at)) if start_at else now
         end = start + timedelta(hours=HEATMAP_HOURS)
         nodes = [grid.node(i) for i in grid.active]
         series = self._weather.hourly(nodes, start, end)
