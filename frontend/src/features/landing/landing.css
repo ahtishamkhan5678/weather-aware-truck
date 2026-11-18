@@ -36,6 +36,119 @@
   transform: translateY(-1px);
 }
 
+/* ── Sticky top bar (all viewports) ─────────────────────────────────────────────────── */
+.topbar {
+  position: fixed;
+  inset: 0 0 auto 0;
+  z-index: 50;
+  pointer-events: none; /* only the controls catch clicks */
+  transition: background 0.35s, backdrop-filter 0.35s;
+}
+
+.topbar__inner {
+  max-width: calc(1440 * var(--s));
+  margin: 0 auto;
+  padding: calc(61 * var(--s)) calc(57 * var(--s)) 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(20 * var(--s));
+  transition: padding 0.35s var(--ease-out);
+}
+
+.topbar__inner > * {
+  pointer-events: auto;
+}
+
+.topbar.is-scrolled .topbar__inner {
+  padding-top: max(12px, calc(16 * var(--s)));
+  padding-bottom: max(12px, calc(16 * var(--s)));
+}
+
+.topbar__right {
+  display: flex;
+  align-items: center;
+  gap: calc(18 * var(--s));
+  min-width: 0;
+}
+
+.topbar__date {
+  font-size: calc(13 * var(--s));
+  color: #555;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  border-radius: 999px;
+  padding: calc(8 * var(--s)) calc(14 * var(--s));
+  transition: background 0.35s, color 0.35s;
+}
+
+.topbar__date span {
+  color: var(--ink);
+}
+
+.topbar.is-scrolled .topbar__date {
+  background: rgba(244, 244, 244, 0.82);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.landing .topbar__cta {
+  flex: none;
+  min-width: calc(144 * var(--s));
+}
+
+.topbar.is-scrolled .topbar__cta,
+.topbar.is-scrolled .nav {
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.22), 0 10px 30px rgba(0, 0, 0, 0.25);
+}
+
+.nav {
+  --nav-item: calc(84 * var(--s));
+  position: relative;
+  flex: none;
+  height: calc(48 * var(--s));
+  padding: calc(4 * var(--s));
+  display: flex;
+  background: #fff;
+  border-radius: 999px;
+  transition: box-shadow 0.35s;
+}
+
+.nav__pill {
+  position: absolute;
+  left: calc(4 * var(--s));
+  top: calc(4 * var(--s));
+  width: var(--nav-item);
+  height: calc(40 * var(--s));
+  border-radius: 999px;
+  background: var(--ink);
+  transition: transform 0.45s var(--ease-out);
+}
+
+.nav a {
+  position: relative;
+  width: var(--nav-item);
+  display: grid;
+  place-items: center;
+  text-decoration: none;
+  font-size: calc(14 * var(--s));
+  color: var(--ink);
+  transition: color 0.3s;
+}
+
+.nav a.is-active {
+  color: #f4f4f4;
+}
+
+/* Medium screens: the date yields space before anything can collide. */
+@media (max-width: 1100px) and (min-width: 761px) {
+  .topbar__date {
+    display: none;
+  }
+}
+
 /* ── Hero ──────────────────────────────────────────────────────────────────────────── */
 .hero {
   position: relative;
@@ -72,66 +185,6 @@
   object-position: 50% 40%;
   filter: grayscale(1) contrast(1.05);
   display: block;
-}
-
-.nav {
-  --nav-item: calc(84 * var(--s));
-  position: absolute;
-  left: calc(57 * var(--s));
-  top: calc(61 * var(--s));
-  height: calc(48 * var(--s));
-  padding: calc(4 * var(--s));
-  display: flex;
-  background: #fff;
-  border-radius: 999px;
-  z-index: 3;
-}
-
-.nav__pill {
-  position: absolute;
-  left: calc(4 * var(--s));
-  top: calc(4 * var(--s));
-  width: var(--nav-item);
-  height: calc(40 * var(--s));
-  border-radius: 999px;
-  background: var(--ink);
-  transition: transform 0.45s var(--ease-out);
-}
-
-.nav a {
-  position: relative;
-  width: var(--nav-item);
-  display: grid;
-  place-items: center;
-  text-decoration: none;
-  font-size: calc(14 * var(--s));
-  color: var(--ink);
-  transition: color 0.3s;
-}
-
-.nav a.is-active {
-  color: #f4f4f4;
-}
-
-.hero__date {
-  position: absolute;
-  left: calc(1038 * var(--s));
-  top: calc(70 * var(--s));
-  font-size: calc(13 * var(--s));
-  white-space: nowrap;
-  color: #555;
-}
-
-.hero__date span {
-  color: var(--ink);
-}
-
-.hero__contact {
-  position: absolute;
-  left: calc(1237 * var(--s));
-  top: calc(63 * var(--s));
-  width: calc(144 * var(--s));
-  z-index: 3;
 }
 
 .hero__title {
@@ -586,6 +639,12 @@
   color: var(--grey);
 }
 
+/* Anchored sections land below the fixed top bar. */
+#method,
+#rules {
+  scroll-margin-top: 80px;
+}
+
 /* ── Statement ─────────────────────────────────────────────────────────────────────── */
 .statement {
   padding: calc(170 * var(--s)) 0 calc(230 * var(--s));
@@ -941,11 +1000,21 @@
     top: auto !important;
   }
 
+  .hero {
+    padding-top: calc(80 * var(--s));
+  }
+
+  .topbar__inner {
+    padding: calc(16 * var(--s)) calc(16 * var(--s)) 0;
+  }
+
+  .topbar.is-scrolled .topbar__inner {
+    padding: calc(10 * var(--s)) calc(16 * var(--s));
+  }
+
   .nav {
     --nav-item: calc(72 * var(--s));
     height: calc(44 * var(--s));
-    align-self: flex-start;
-    order: 0;
   }
 
   .nav__pill {
@@ -956,24 +1025,19 @@
     font-size: calc(13 * var(--s));
   }
 
-  .hero__contact {
-    position: absolute !important;
-    right: calc(16 * var(--s)) !important;
-    top: calc(16 * var(--s)) !important;
-    left: auto !important;
-    width: calc(40 * var(--s));
-    height: calc(40 * var(--s));
-    padding: 0;
-  }
-
-  .hero__contact-text {
+  .topbar__date {
     display: none;
   }
 
-  .hero__date {
-    order: 1;
-    font-size: calc(12 * var(--s));
-    white-space: normal;
+  .landing .topbar__cta {
+    width: calc(44 * var(--s));
+    min-width: 0;
+    height: calc(44 * var(--s));
+    padding: 0;
+  }
+
+  .topbar__cta-text {
+    display: none;
   }
 
   .hero__title {

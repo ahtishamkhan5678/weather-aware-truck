@@ -1,11 +1,13 @@
 import { Hero } from './Hero'
 import { RulesPanel } from './RulesPanel'
 import { Statement } from './Statement'
+import { Topbar } from './Topbar'
 import './landing.css'
 
 export default function LandingPage() {
   return (
     <div className="landing">
+      <Topbar />
       <Hero />
       <div className="bar">
         <span>

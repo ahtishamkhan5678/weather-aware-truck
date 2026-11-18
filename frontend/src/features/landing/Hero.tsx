@@ -2,13 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { isRecording, prefersReducedMotion, useCountUp } from './hooks'
 
-const NAV = [
-  { label: 'Home', href: '#top' },
-  { label: 'Planner', to: '/planner' },
-  { label: 'Method', href: '#method' },
-  { label: 'Rules', href: '#rules' },
-]
-
 const MARKS = [
   { name: '10 mi', glyph: 'M2 10h16M6 6v8M14 6v8' },
   { name: '25 mi', glyph: 'M3 15 10 4l7 11z' },
@@ -18,23 +11,12 @@ const MARKS = [
   { name: 'Snow', glyph: 'M10 2v16M3 6l14 8M17 6 3 14' },
 ]
 
-function dateLine(d = new Date()) {
-  const day = d.toLocaleDateString('en-GB', { weekday: 'long' })
-  const dm = `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}`
-  const in48 = new Date(d.getTime() + 48 * 3_600_000)
-  const end = `${String(in48.getDate()).padStart(2, '0')}.${String(in48.getMonth() + 1).padStart(2, '0')}`
-  return { day, range: `${dm} – ${end} · 48h forecast` }
-}
-
 export function Hero() {
   const root = useRef<HTMLElement>(null)
   const photo = useRef<HTMLDivElement>(null)
-  const [navIndex, setNavIndex] = useState(0)
-  const [hoverIndex, setHoverIndex] = useState<number | null>(null)
   const [loaded, setLoaded] = useState(false)
   const routes = useCountUp(3, loaded, 1400, 500)
   const hours = useCountUp(48, loaded, 1400, 600)
-  const { day, range } = dateLine()
 
   // Load choreography (Web Animations API).
   useEffect(() => {
@@ -53,7 +35,6 @@ export function Hero() {
       ],
       { duration: 1300, easing: ease, fill: 'both' },
     )
-    el.querySelector('.nav')?.animate([{ opacity: 0, transform: 'translateY(-16px)' }, { opacity: 1, transform: 'none' }], { duration: 800, easing: ease, fill: 'both' })
     el.querySelectorAll<HTMLElement>('[data-rise]').forEach((n, i) =>
       n.animate([{ opacity: 0, transform: 'translateY(14px)' }, { opacity: 1, transform: 'none' }], { duration: 800, delay: 300 + i * 55, easing: ease, fill: 'both' }),
     )
@@ -83,35 +64,11 @@ export function Hero() {
     }
   }, [])
 
-  const pillIndex = hoverIndex ?? navIndex
-
   return (
     <header className="hero" id="top" ref={root}>
       <div className="hero__photo" ref={photo} aria-hidden>
         <img src="/media/hero-road.jpg" alt="" fetchPriority="high" />
       </div>
-
-      <nav className="nav" aria-label="Primary" onMouseLeave={() => setHoverIndex(null)}>
-        <span className="nav__pill" style={{ transform: `translateX(calc(${pillIndex} * var(--nav-item)))` }} />
-        {NAV.map((n, i) =>
-          n.to ? (
-            <Link key={n.label} to={n.to} className={pillIndex === i ? 'is-active' : ''} onMouseEnter={() => setHoverIndex(i)}>
-              {n.label}
-            </Link>
-          ) : (
-            <a key={n.label} href={n.href} className={pillIndex === i ? 'is-active' : ''} onMouseEnter={() => setHoverIndex(i)} onClick={() => setNavIndex(i)}>
-              {n.label}
-            </a>
-          ),
-        )}
-      </nav>
-
-      <div className="hero__date" data-rise>
-        <span>{day}</span> / {range}
-      </div>
-      <Link to="/planner" className="btn-black hero__contact" data-rise aria-label="Plan a route">
-        <span className="hero__contact-text">Plan Route</span> <span aria-hidden>↗</span>
-      </Link>
 
       <h1 className="hero__title">
         <span className="title-line">

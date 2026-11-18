@@ -42,6 +42,16 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  /* Sticky header: stays visible while the panel (desktop) or page (mobile) scrolls. */
+  position: sticky;
+  top: -22px; /* cancel the panel's top padding so it sits flush with the edge */
+  z-index: 20;
+  margin: -22px -22px 0;
+  padding: 16px 22px 12px;
+  background: rgba(0, 0, 0, 0.88);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-bottom: 1px solid transparent;
 }
 
 .brand-mark {
@@ -1050,7 +1060,10 @@
 
   .panel__brand {
     order: 1;
-    margin-top: 16px;
+    top: 0;
+    margin: 0;
+    padding: 12px 16px;
+    border-bottom-color: var(--line);
   }
 
   .panel__intro {
