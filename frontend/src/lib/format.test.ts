@@ -8,6 +8,9 @@ describe('format', () => {
     expect(fmt.duration(9 * 3600 + 3 * 60)).toBe('9h 03m')
     expect(fmt.duration(50 * 3600)).toBe('2d 2h 00m')
   })
+  it('never rounds wind across a threshold', () => {
+    expect(fmt.wind(24.7)).toBe('24.7 mph')
+  })
   it('formats datetime-local input values and next hour', () => {
     const d = new Date(2026, 10, 18, 21, 37)
     expect(toLocalInput(d)).toBe('2026-11-18T21:37')

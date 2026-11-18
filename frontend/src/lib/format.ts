@@ -19,7 +19,8 @@ export const fmt = {
   time: (iso: string | Date) => timeOnly.format(new Date(iso)),
   day: (iso: string | Date) => dayMonth.format(new Date(iso)),
   weight: (lb: number) => `${Math.round(lb).toLocaleString()} lb`,
-  wind: (mph: number) => `${Math.round(mph)} mph`,
+  // One decimal: 24.7 mph must not display as "25" next to a Low (<25) classification.
+  wind: (mph: number) => `${mph.toFixed(1)} mph`,
   rate: (inHr: number) => `${inHr.toFixed(2)} in/hr`,
 }
 

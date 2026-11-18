@@ -632,7 +632,7 @@
 
 .cp-row {
   display: grid;
-  grid-template-columns: 40px minmax(0, 1fr) 36px 42px 42px 84px;
+  grid-template-columns: 40px minmax(0, 1fr) 40px 42px 42px 84px;
   gap: 6px;
   align-items: center;
   width: 100%;

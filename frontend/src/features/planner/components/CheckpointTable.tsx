@@ -59,7 +59,7 @@ export function CheckpointTable() {
               <span role="cell">{cp.distance_mi.toFixed(0)}</span>
               <span role="cell">{fmt.dateTime(cp.eta)}</span>
               <span role="cell" className={cp.drivers.includes('wind') ? 'is-driver' : ''}>
-                {Math.round(cp.weather.wind_mph)}
+                {cp.weather.wind_mph.toFixed(1)}
               </span>
               <span role="cell" className={cp.drivers.includes('rain') ? 'is-driver' : ''}>
                 {cp.weather.rain_in_hr.toFixed(2)}
