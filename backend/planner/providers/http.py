@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import random
 import threading
 import time
 
@@ -95,14 +96,24 @@ class CacheSlotThrottle:
             return bool(self._redis.set(self._key, 1, nx=True, px=int(self._interval * 1000)))
         return bool(self._cache.add(self._key, 1, timeout=self._interval))
 
+    def _remaining_s(self) -> float:
+        """How long until the current holder's slot expires (PTTL) — sleep exactly that."""
+        if self._redis is not None:
+            ms = self._redis.pttl(self._key)
+            if ms and ms > 0:
+                return ms / 1000
+        return 0.05
+
     def wait(self) -> None:
         if self._interval <= 0:
             return
         deadline = time.monotonic() + self._max_wait
+        # ~2 Redis commands per wait cycle (SET NX + PTTL) instead of polling, which keeps
+        # usage far below the free tier's 100 ops/sec even with several queued requests.
         while not self._claim():
             if time.monotonic() > deadline:
                 raise TimeoutError(f"Throttle wait exceeded {self._max_wait}s for {self._key}")
-            time.sleep(0.05)
+            time.sleep(self._remaining_s() + random.uniform(0.005, 0.03))
 
 
 class ResilientThrottle:
