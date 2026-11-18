@@ -28,6 +28,7 @@ The order matters: **backend → Redis → frontend → connect them**. Total ti
 ## 1. Backend project (Django API)
 
 1. Go to https://vercel.com/new and click **Import** next to your GitHub repository. The first time, click **Adjust GitHub App Permissions** and allow the repo.
+   Vercel shows "Multiple applications detected". Click **Import single project →** on the **backend (Django)** row. Don't use the multi-service "Copy prompt" option.
 2. **Project Name:** `weather-aware-api`
 3. **Root Directory:** click **Edit**, choose **`backend`**, then **Continue**.
 4. **Framework Preset:** it should show **Django** automatically, because Vercel finds `backend/manage.py`. Leave the Build and Output settings as they are.
@@ -45,7 +46,8 @@ The order matters: **backend → Redis → frontend → connect them**. Total ti
    ```json
    {"status":"ok"}
    ```
-   Also open `/api/rules`, which should return the risk thresholds as JSON.
+   (After step 2 it also shows `"cache":"redis"`.) Also open `/api/rules`, which should return the risk thresholds as JSON.
+   Opening the backend's root URL shows "Frontend not built". That's expected; this project is the API only.
 
 ### What the repo already configures for you
 
@@ -57,21 +59,32 @@ The order matters: **backend → Redis → frontend → connect them**. Total ti
 
 ## 2. Add Redis (required for the backend)
 
-Vercel runs the backend as **many short-lived instances**. Without a shared store, each instance would have its own cache and its own request throttle. The public routing servers allow **1 request/second**, and exceeding that gets the server IP **blocked**, which we've seen happen. Redis makes the cache and the throttle shared by every instance.
+Vercel runs the backend as **many short-lived instances**. Without a shared store, each instance would have its own cache and its own request throttle. The public routing servers allow **1 request/second**, and exceeding that gets the server IP **blocked**. Redis makes the cache and the throttle shared by every instance.
 
-1. Open the **weather-aware-api** project, then the **Storage** tab, then **Create Database** (or browse the **Marketplace**).
-2. Choose **Upstash → Redis**, pick the **Free** plan, choose a region close to your users (for example `us-east-1`), and create it.
-3. When asked to connect it to a project, choose **weather-aware-api** and tick **all environments**. This adds a `REDIS_URL` or `KV_URL` variable; the app accepts either.
-4. Go to **Deployments**, click **⋯** on the latest deployment, then **Redeploy**. Environment variables apply only to new deployments.
-5. **Check:** `/api/health` still says `{"status":"ok"}`.
+1. Open the **weather-aware-api** project, then the **Storage** tab, then **Create Database**.
+2. Choose **Redis — Official Redis for Vercel** (Redis Cloud) and click **Continue**, then **Accept and Create**.
+3. **Configuration and Plan:**
+   - Region: **Washington, D.C., USA (East) – iad1**
+   - Storage Type: **RAM only**
+   - High Availability: **None · free plan friendly**. Only with this setting does the free plan appear.
+   - Plan: **Free — 30 MB** ($0, no card needed)
+4. **Confirmation:** name it `weather-aware-redis`, then **Create**.
+5. **Connect a Project:** choose **weather-aware-api**, environments **Production and Preview**.
+   - **Custom Prefix: type `REDIS`** (Vercel adds `_URL` itself, which gives `REDIS_URL`). Don't type `REDIS_URL` here, or the variable becomes `REDIS_URL_URL`.
+   - Click **Connect**.
+6. **Deployments → ⋯ on the top deployment → Redeploy → Redeploy.**
+7. **Check:** `/api/health` now returns `{"status":"ok","cache":"redis"}`.
+
+The free plan has no replication. If Redis is ever unavailable, the app keeps working: the cache becomes a pass-through and the throttle falls back to per-instance spacing, and `/api/health` shows `"cache":"redis-unavailable"`.
 
 ---
 
 ## 3. Frontend project (React)
 
 1. Go to https://vercel.com/new and **Import** the **same** repository again.
+   On the "Multiple applications detected" screen, click **Import single project →** on the **frontend (Vite)** row. Ignore the multi-service "Copy prompt" box.
 2. **Project Name:** `weather-aware-web`
-3. **Root Directory:** **Edit**, then **`frontend`**.
+3. **Root Directory:** **`frontend`**.
 4. **Framework Preset:** **Vite** is detected. Leave the build command (`npm run build`) and output directory (`dist`) as they are; `frontend/vercel.json` sets them too.
 5. **Environment Variables:** add one:
 
@@ -104,7 +117,7 @@ The browser only lets the frontend call the backend if the backend allows the fr
    |---|---|
    | `CORS_ALLOWED_ORIGIN_REGEXES` | `^https://weather-aware-web(-[a-z0-9-]+)?\.vercel\.app$` |
 
-4. **Redeploy** the backend (Deployments → ⋯ → Redeploy).
+4. **Redeploy** the backend (Deployments → ⋯ → Redeploy). **Saving a variable does nothing until you redeploy.**
 
 ---
 

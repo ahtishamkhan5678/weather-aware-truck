@@ -4,6 +4,8 @@ A React + Django app that helps a truck driver choose the **safest** route by co
 truck routing, the **hourly forecast at the moment the truck reaches each checkpoint**, the
 **load weight**, and travel time.
 
+**Live:** https://weather-aware-web.vercel.app (API: https://weather-aware-api.vercel.app/api/health)
+
 - **Landing page** (`/`) explains the product and serves the live risk matrix.
 - **Planner** (`/planner`) is the tool itself: three routes, checkpoints, risk, ETAs, the recommendation, and a 0–48 h corridor heatmap.
 
