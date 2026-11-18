@@ -142,3 +142,8 @@ def test_unknown_api_path_is_json_404(client):
     res = client.get("/api/does-not-exist")
     assert res.status_code == 404
     assert res.json()["error"]["code"] == "not_found"
+
+
+def test_health_reports_cache_mode(client):
+    data = client.get("/api/health").json()
+    assert data == {"status": "ok", "cache": "local"}

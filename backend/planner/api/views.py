@@ -22,8 +22,20 @@ class PlanThrottle(AnonRateThrottle):
 
 
 class HealthView(APIView):
+    """Liveness + whether the shared cache (Redis) is configured and reachable."""
+
     def get(self, request):
-        return Response({"status": "ok"})
+        from django.core.cache import cache
+
+        if not settings.PLANNER["SHARED_CACHE"]:
+            cache_state = "local"
+        else:
+            try:
+                cache.set("health:ping", 1, 10)
+                cache_state = "redis" if cache.get("health:ping") == 1 else "redis-unavailable"
+            except Exception:
+                cache_state = "redis-unavailable"
+        return Response({"status": "ok", "cache": cache_state})
 
 
 class RulesView(APIView):
