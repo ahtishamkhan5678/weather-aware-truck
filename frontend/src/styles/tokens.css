@@ -1,0 +1,29 @@
+:root {
+  --paper: #dadada;
+  --paper-2: #cdcdcd;
+  --ink: #111;
+  --black: #000;
+  --text: #f4f4f4;
+  --grey: #6f6f6f;
+  --muted: #8a8a8a;
+  --line: rgba(255, 255, 255, 0.14);
+  --line-strong: rgba(255, 255, 255, 0.28);
+  --card: #0d0d0d;
+  --card-2: #161616;
+  --card-3: #262626;
+
+  --font-ui: 'Inter Tight', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: 'Archivo', 'Inter Tight', system-ui, sans-serif;
+
+  /* 1440-px artboard unit (capped so huge screens don't blow up). */
+  --u: min(calc(100vw / 1440), 1.333px);
+
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  color-scheme: light dark;
+}
+
+@media (max-width: 760px) {
+  :root {
+    --u: calc(100vw / 390);
+  }
+}
