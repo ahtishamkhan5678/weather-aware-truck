@@ -81,9 +81,12 @@ export function MapView() {
     const [sw, ne] = bounds(plan.routes.map((r) => r.geometry))
     const narrow = window.matchMedia('(max-width: 900px)').matches
     map.fitBounds([sw, ne], {
-      padding: narrow ? 40 : { top: 80, bottom: 170, left: 60, right: 80 },
+      // Keep routes clear of the legend (top) and the forecast panel (bottom).
+      padding: narrow ? { top: 70, bottom: 200, left: 30, right: 50 } : { top: 80, bottom: 190, left: 60, right: 80 },
       duration: 900,
     })
+    // On phones the map sits below the form: bring it into view once results arrive.
+    if (narrow) container.current?.parentElement?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }, [plan, ready])
 
   // ── 3. Selection → emphasise one route and colour it by risk ──────────────────────────

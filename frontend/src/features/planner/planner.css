@@ -1,12 +1,14 @@
 /* ── Layout ─────────────────────────────────────────────────────────────────────────── */
 .planner {
   display: grid;
-  grid-template-columns: 440px 1fr;
+  grid-template-columns: clamp(340px, 32vw, 440px) minmax(0, 1fr);
   height: 100dvh;
   background: var(--black);
 }
 
 .panel {
+  min-width: 0;
+  overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
   border-right: 1px solid var(--line);
@@ -441,6 +443,7 @@
 }
 
 .route-card {
+  min-width: 0;
   text-align: left;
   background: var(--card);
   border: 1px solid var(--line);
@@ -585,14 +588,17 @@
 .timeline {
   display: flex;
   height: 14px;
-  gap: 2px;
+  gap: 1px;
+  min-width: 0;
+  overflow: hidden;
+  border-radius: 4px;
 }
 
 .timeline button {
   border: 0;
   padding: 0;
-  border-radius: 3px;
-  min-width: 3px;
+  min-width: 0;
+  flex-basis: 0;
   opacity: 0.85;
 }
 
@@ -604,6 +610,7 @@
 .cp-table {
   max-height: 340px;
   overflow-y: auto;
+  overflow-x: hidden;
   border: 1px solid var(--line);
   border-radius: 12px;
   scrollbar-width: thin;
@@ -611,7 +618,7 @@
 
 .cp-row {
   display: grid;
-  grid-template-columns: 44px 1fr 40px 44px 44px 92px;
+  grid-template-columns: 40px minmax(0, 1fr) 36px 42px 42px 84px;
   gap: 6px;
   align-items: center;
   width: 100%;
@@ -1024,26 +1031,70 @@
 
 /* ── Responsive ────────────────────────────────────────────────────────────────────── */
 @media (max-width: 900px) {
+  /* Phone/tablet: form → map → results, in one scrolling column. */
   .planner {
-    grid-template-columns: 1fr;
-    grid-template-rows: 72dvh auto;
+    display: flex;
+    flex-direction: column;
     height: auto;
-  }
-
-  .map-wrap {
-    grid-row: 1;
-    height: 72dvh;
-    position: relative;
+    min-height: 100dvh;
   }
 
   .panel {
-    grid-row: 2;
-    overflow: visible;
-    border-right: 0;
-    position: relative;
-    z-index: 2;
-    background: #000;
-    padding: 16px;
+    display: contents;
+  }
+
+  .panel > * {
+    margin-left: 16px;
+    margin-right: 16px;
+  }
+
+  .panel__brand {
+    order: 1;
+    margin-top: 16px;
+  }
+
+  .panel__intro {
+    order: 2;
+    margin-top: 14px;
+  }
+
+  .plan-form {
+    order: 3;
+    margin-top: 14px;
+  }
+
+  .panel > .notice,
+  .skeleton {
+    order: 4;
+    margin-top: 12px;
+  }
+
+  .map-wrap {
+    order: 5;
+    height: 78dvh;
+    min-height: 460px;
+    margin-top: 16px;
+    scroll-margin-top: 0;
+  }
+
+  .results {
+    order: 6;
+    margin-top: 16px;
+  }
+
+  .checkpoints {
+    order: 7;
+    margin-top: 16px;
+  }
+
+  .howto {
+    order: 8;
+    margin-top: 16px;
+  }
+
+  .panel__foot {
+    order: 9;
+    margin: 16px;
   }
 
   .forecast {

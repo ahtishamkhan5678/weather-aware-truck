@@ -73,7 +73,7 @@ class CoordinateListField(serializers.ListField):
 
 class HeatmapRequestSerializer(serializers.Serializer):
     routes = serializers.ListField(
-        child=CoordinateListField(min_length=2, max_length=6000), min_length=1, max_length=3
+        child=CoordinateListField(min_length=2, max_length=10_000), min_length=1, max_length=3
     )
     load_weight_lb = serializers.FloatField(min_value=0, max_value=MAX_LOAD_LB)
 

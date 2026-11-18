@@ -45,3 +45,14 @@ describe('riskSegments', () => {
     expect(segs.map((s) => s.level)).toEqual(['low', 'severe'])
   })
 })
+
+describe('downsample', () => {
+  it('bounds length and keeps both endpoints', async () => {
+    const { downsample } = await import('../store/plannerStore')
+    const pts = Array.from({ length: 10_001 }, (_, i) => i)
+    const out = downsample(pts, 1500)
+    expect(out.length).toBeLessThanOrEqual(1501)
+    expect(out[0]).toBe(0)
+    expect(out[out.length - 1]).toBe(10_000)
+  })
+})

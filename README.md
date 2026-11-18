@@ -164,7 +164,7 @@ npm run dev
 
 ```bash
 cd backend  && pytest && ruff check . && ruff format --check .   # 75 tests
-cd frontend && npm test && npm run lint && npm run build
+cd frontend && npm test && npm run lint && npm run build             # 5 tests
 ```
 
 The backend tests cover:

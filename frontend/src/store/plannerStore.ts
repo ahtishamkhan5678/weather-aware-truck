@@ -142,7 +142,7 @@ async function loadHeatmap(plan: PlanResponse) {
   heatAbort = ctrl
   try {
     const heatmap = await api.heatmap(
-      plan.routes.map((r) => r.geometry),
+      plan.routes.map((r) => downsample(r.geometry, 1500)),
       plan.load_weight_lb,
       ctrl.signal,
     )
@@ -159,6 +159,15 @@ async function loadHeatmap(plan: PlanResponse) {
       heatmapError: err instanceof ApiError ? err.message : 'Heatmap unavailable.',
     })
   }
+}
+
+/** Keep every k-th vertex (plus the last) so long trips stay within the API's limits. */
+export function downsample<T>(points: T[], max: number): T[] {
+  if (points.length <= max) return points
+  const step = Math.ceil(points.length / max)
+  const out = points.filter((_, i) => i % step === 0)
+  if (out[out.length - 1] !== points[points.length - 1]) out.push(points[points.length - 1])
+  return out
 }
 
 /** Derived selector helpers. */

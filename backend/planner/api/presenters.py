@@ -10,6 +10,7 @@ from ..services.heatmap import HeatmapResult
 from ..services.planner import PlanResult
 
 GEOMETRY_TOLERANCE_M = 25.0
+MAX_GEOMETRY_POINTS = 4000
 
 
 def _iso(dt: datetime) -> str:
@@ -51,7 +52,11 @@ def checkpoint(c: Checkpoint) -> dict:
 
 
 def route(a: RouteAnalysis, recommended_id: str, rank: int) -> dict:
-    geometry = simplify(a.route.points, GEOMETRY_TOLERANCE_M)
+    tolerance = GEOMETRY_TOLERANCE_M
+    geometry = simplify(a.route.points, tolerance)
+    while len(geometry) > MAX_GEOMETRY_POINTS:  # very long trips: coarser but bounded
+        tolerance *= 2
+        geometry = simplify(a.route.points, tolerance)
     return {
         "id": a.route_id,
         "rank": rank,
