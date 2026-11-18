@@ -70,3 +70,35 @@ class CircuitBreaker:
     def reset(self) -> None:
         with self._lock:
             self._open_until = 0.0
+
+
+class CacheSlotThrottle:
+    """Distributed version of :class:`HostThrottle` for multi-instance hosting (Vercel).
+
+    With Redis, each request must create a key that expires after ``min_interval_s``
+    (``SET NX PX``). While the key lives, every other instance waits — so consecutive
+    requests to the host are *always* at least the interval apart, deployment-wide.
+    Without Redis (tests/local), it falls back to the cache's atomic ``add``.
+    """
+
+    def __init__(self, cache, key: str, min_interval_s: float, max_wait_s: float = 30.0):
+        self._cache = cache
+        self._key = f"thr:{key}"
+        self._interval = min_interval_s
+        self._max_wait = max_wait_s
+        client_factory = getattr(getattr(cache, "_cache", None), "get_client", None)
+        self._redis = client_factory(write=True) if callable(client_factory) else None
+
+    def _claim(self) -> bool:
+        if self._redis is not None:
+            return bool(self._redis.set(self._key, 1, nx=True, px=int(self._interval * 1000)))
+        return bool(self._cache.add(self._key, 1, timeout=self._interval))
+
+    def wait(self) -> None:
+        if self._interval <= 0:
+            return
+        deadline = time.monotonic() + self._max_wait
+        while not self._claim():
+            if time.monotonic() > deadline:
+                raise TimeoutError(f"Throttle wait exceeded {self._max_wait}s for {self._key}")
+            time.sleep(0.05)

@@ -33,7 +33,7 @@ _load_dotenv(BASE_DIR / ".env")
 
 DEBUG = _env_bool("DJANGO_DEBUG", False)
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "dev-insecure-secret-key-change-me")
-ALLOWED_HOSTS = _env_list("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1,.onrender.com")
+ALLOWED_HOSTS = _env_list("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1,.onrender.com,.vercel.app")
 CSRF_TRUSTED_ORIGINS = _env_list("CSRF_TRUSTED_ORIGINS")
 
 INSTALLED_APPS = [
@@ -69,11 +69,14 @@ TEMPLATES = [
 # The app is stateless — no relational data is stored.
 DATABASES: dict = {}
 
-if os.environ.get("REDIS_URL"):
+# Shared cache (required for multi-instance hosting such as Vercel). Vercel's Redis
+# integrations expose REDIS_URL or KV_URL depending on the provider.
+REDIS_URL = os.environ.get("REDIS_URL") or os.environ.get("KV_URL") or ""
+if REDIS_URL:
     CACHES = {
         "default": {
             "BACKEND": "django.core.cache.backends.redis.RedisCache",
-            "LOCATION": os.environ["REDIS_URL"],
+            "LOCATION": REDIS_URL,
         }
     }
 else:
@@ -99,6 +102,8 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 CORS_ALLOWED_ORIGINS = _env_list(
     "CORS_ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173"
 )
+# e.g. ^https://weather-aware-frontend(-[a-z0-9-]+)?\.vercel\.app$ to allow preview deployments
+CORS_ALLOWED_ORIGIN_REGEXES = _env_list("CORS_ALLOWED_ORIGIN_REGEXES")
 
 REST_FRAMEWORK = {
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
@@ -136,6 +141,8 @@ PLANNER = {
     "TRUCK_MAX_SPEED_MPH": float(os.environ.get("TRUCK_MAX_SPEED_MPH", "65")),
     "TRUCK_APPLY_HOS": _env_bool("TRUCK_APPLY_HOS", True),
     "ROUTE_OPTIONS": 3,
+    # True when CACHES points at Redis: cache *and* upstream throttles span all instances.
+    "SHARED_CACHE": bool(REDIS_URL),
     # Weather lookups per heatmap. 280 keeps plan + heatmap inside Open-Meteo's free
     # 600 calls/minute; raise it (e.g. 1500) with an API key for a finer grid.
     "HEATMAP_MAX_NODES": int(os.environ.get("HEATMAP_MAX_NODES", "280")),

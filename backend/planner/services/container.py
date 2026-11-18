@@ -12,7 +12,7 @@ from ..domain.eta import HoursOfService, TruckEtaModel
 from ..domain.ranking import RouteRanker
 from ..domain.risk import DEFAULT_POLICY, RiskClassifier
 from ..providers.cache import CachedRouteFinder, CachedWeatherProvider
-from ..providers.http import CircuitBreaker, HostThrottle, build_session
+from ..providers.http import CacheSlotThrottle, CircuitBreaker, HostThrottle, build_session
 from ..providers.long_haul import ChainedTruckRoutingProvider
 from ..providers.open_meteo import OpenMeteoWeatherProvider
 from ..providers.osrm import OsrmRoutingProvider
@@ -26,6 +26,13 @@ from .planner import TripPlanner
 @lru_cache(maxsize=1)
 def _session():
     return build_session()
+
+
+def _throttle(key: str, interval: float):
+    """Shared (Redis) throttle when a shared cache exists, else an in-process one."""
+    if settings.PLANNER["SHARED_CACHE"]:
+        return CacheSlotThrottle(cache, key, interval)
+    return HostThrottle(interval)
 
 
 @lru_cache(maxsize=1)
@@ -54,14 +61,14 @@ def trip_planner() -> TripPlanner:
         timeout_s=cfg["HTTP_TIMEOUT_S"],
         max_distance_km=cfg["VALHALLA_MAX_KM"],
         top_speed_kph=cfg["TRUCK_MAX_SPEED_MPH"] * 1.609344,
-        throttle=HostThrottle(cfg["VALHALLA_MIN_INTERVAL_S"]),
+        throttle=_throttle("valhalla", cfg["VALHALLA_MIN_INTERVAL_S"]),
         breaker=CircuitBreaker(cooldown_s=300),
     )
     osrm = OsrmRoutingProvider(
         _session(),
         cfg["OSRM_BASE_URL"],
         timeout_s=cfg["HTTP_TIMEOUT_S"],
-        throttle=HostThrottle(cfg["OSRM_MIN_INTERVAL_S"]),
+        throttle=_throttle("osrm", cfg["OSRM_MIN_INTERVAL_S"]),
     )
     # Truck routing for every trip length (long trips: OSRM corridor → truck-routed legs);
     # plain OSRM only if the truck engine is unavailable.

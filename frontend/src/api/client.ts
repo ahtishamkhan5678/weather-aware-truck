@@ -7,7 +7,7 @@ import type {
   RulesResponse,
 } from './types'
 
-const BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? '/api'
+const BASE = ((import.meta.env.VITE_API_BASE as string | undefined) || '/api').replace(/\/$/, '')
 
 export class ApiError extends Error {
   readonly code: string

@@ -203,7 +203,10 @@ CI runs all of it (`.github/workflows/ci.yml`).
 
 ## Deploy
 
-The app ships as **one container**: the React build is served by Django/WhiteNoise, pre-compressed, with immutable caching for hashed assets.
+**Vercel (recommended): see [`DEPLOY_VERCEL.md`](DEPLOY_VERCEL.md)** for the step-by-step guide.
+It uses two projects from this repo: `backend/` as the Django API and `frontend/` as the React app. Upstash Redis is required there, so the cache and the 1 request/second throttle for the public routing servers are shared across serverless instances.
+
+**Alternative: one container.** The app also ships as **one container**: the React build is served by Django/WhiteNoise, pre-compressed, with immutable caching for hashed assets.
 
 ```bash
 docker build -t truck-routing .
@@ -217,7 +220,7 @@ docker run -p 8000:8000 -e DJANGO_SECRET_KEY=change-me -e DJANGO_ALLOWED_HOSTS='
 | `DJANGO_SECRET_KEY` | dev key | **Set in production** |
 | `DJANGO_ALLOWED_HOSTS` | `localhost,127.0.0.1,.onrender.com` | |
 | `OPEN_METEO_API_KEY` | — | Recommended for production traffic |
-| `REDIS_URL` | — | Shared cache across instances |
+| `REDIS_URL` (or `KV_URL`) | — | Shared cache **and** a cross-instance throttle. **Required on Vercel** |
 | `HEATMAP_MAX_NODES` | 280 | Weather lookups per heatmap. Raise it with an API key for a finer grid |
 | `VALHALLA_BASE_URL` / `OSRM_BASE_URL` | public demo servers | Point at self-hosted engines for production traffic |
 | `VALHALLA_MIN_INTERVAL_S` / `OSRM_MIN_INTERVAL_S` | 1.05 | Request spacing. Set to 0 for self-hosted engines |

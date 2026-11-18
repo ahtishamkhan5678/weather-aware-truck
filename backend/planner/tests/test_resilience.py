@@ -139,3 +139,15 @@ def test_corridor_grid_respects_budget_and_covers_route():
 def test_rate_limited_is_a_provider_error_with_retry_hint():
     exc = RateLimited("busy", provider="open-meteo")
     assert isinstance(exc, ProviderError) and exc.retry_after_s == 60
+
+
+def test_cache_slot_throttle_allows_one_request_per_slot_across_instances():
+    from planner.providers.http import CacheSlotThrottle
+
+    shared = LocMemCache("slots", {})
+    a = CacheSlotThrottle(shared, "host", 0.05)
+    b = CacheSlotThrottle(shared, "host", 0.05)  # a second "instance" sharing the cache
+    t0 = time.monotonic()
+    for throttle in (a, b, a, b):
+        throttle.wait()
+    assert time.monotonic() - t0 >= 0.1  # 4 requests need at least 3 slot boundaries
