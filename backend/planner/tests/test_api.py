@@ -136,3 +136,9 @@ def test_heatmap_starts_at_departure(client):
     )
     assert res.status_code == 200
     assert res.json()["start"] == dep.isoformat().replace("+00:00", "Z")
+
+
+def test_unknown_api_path_is_json_404(client):
+    res = client.get("/api/does-not-exist")
+    assert res.status_code == 404
+    assert res.json()["error"]["code"] == "not_found"

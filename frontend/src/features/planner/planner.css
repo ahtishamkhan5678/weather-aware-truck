@@ -762,7 +762,7 @@
 
 .forecast__row {
   display: grid;
-  grid-template-columns: 38px 118px 1fr;
+  grid-template-columns: 38px 150px 1fr;
   gap: 12px;
   align-items: center;
 }

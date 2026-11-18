@@ -39,15 +39,15 @@ test('complete flow: inputs → 3 routes → recommendation → checkpoints → 
   // Heatmap ready; slider starts at departure; layers switch.
   const slider = page.getByRole('slider', { name: 'Forecast hour' })
   await expect(slider).toBeVisible()
-  await expect(page.locator('.forecast__time')).toContainText('Departure')
+  await expect(page.locator('.forecast__time')).toContainText('Departure hour')
   await slider.fill('12')
-  await expect(page.locator('.forecast__time')).toContainText('Departure +12 h')
+  await expect(page.locator('.forecast__time')).toContainText('+12 h after departure hour')
   await page.getByRole('radio', { name: 'Wind' }).click()
   await expect(page.locator('.legend__label')).toContainText('Wind')
 
   // Clicking a checkpoint row syncs the slider to that checkpoint's ETA.
   await page.locator('.cp-row').nth(5).click() // mile 100 → ~1.7 h after departure
-  await expect(page.locator('.forecast__time')).toContainText('Departure +2 h')
+  await expect(page.locator('.forecast__time')).toContainText('+2 h after departure hour')
   await expect(page.locator('.cp-popup')).toContainText('Route B')
 
   // Selecting another route swaps the table.

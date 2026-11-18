@@ -72,8 +72,9 @@ cd backend  && source .venv/bin/activate && pytest -v
 cd frontend && npm test && npm run lint && npm run build
 ```
 
-- [ ] Backend: **75 passed**. These cover every risk threshold boundary, every load rule, sampling, ETA/HOS maths, ranking order, the providers and the API.
-- [ ] Frontend: **5 passed**, lint is clean, and the build succeeds.
+- [ ] Backend: **88 passed**. These cover every risk threshold boundary, every load rule, sampling, ETA/HOS maths, ranking order, the providers, long-haul chaining, the throttle and breaker, caching and the API.
+- [ ] Frontend: **12 passed**, lint is clean, and the build succeeds.
+- [ ] End-to-end: `npx playwright install chromium && npm run test:e2e` gives **16 passed** (desktop and mobile).
 
 These tests prove the rules are correct even when the live weather is calm.
 
@@ -107,7 +108,7 @@ Click the preset **Denver → Salt Lake City**, then **Find the safest route ↗
 | 3.2 | **Exactly 3 route cards (A, B, C)** appear, and **3 lines** appear on the map |
 | 3.3 | Each card shows the main roads (e.g. "I 70 · I 15"), distance, trip time and arrival |
 | 3.4 | Card subtitle says **"via truck routing"**. Valhalla's truck profile was used, with the load weight sent |
-| 3.5 | Repeat with a long trip (type `Los Angeles` → `Chicago`). There are still **3 routes**, and the subtitle says "via road routing" (OSRM fallback, because the trip is over about 930 mi) |
+| 3.5 | Repeat with a long trip (type `Los Angeles` → `Chicago`). There are still **3 routes**, and the subtitle still says "truck routing (weight-aware)": long trips are chained truck legs. Expect about 15–30 s, because the public servers allow 1 request/second |
 
 - [ ] 3 distinct routes on both trips
 
@@ -206,6 +207,7 @@ curl -s localhost:8000/api/rules | python3 -m json.tool
 | 7.2 | Route summary chips on the map | Each shows "A · 491 mi · 9h 01m · Moderate max · ETA 06:01" |
 | 7.3 | Click a different route (chip, line or card) | It becomes highlighted and the checkpoint table switches to it |
 | 7.4 | Hover a checkpoint dot | Popup: route and checkpoint number, ETA, mile, wind/gust, rain, snow, level |
+| 7.4b | Look next to the selected route's dots | Each checkpoint has its **ETA printed on the map**, e.g. "22:51" or "Thu 01:25" after midnight |
 | 7.5 | Click a row in the checkpoint table | The map shows that checkpoint's popup and pans to it, and the **slider jumps to that ETA hour** |
 | 7.6 | Click a segment of the coloured timeline strip | Same as 7.5 |
 | 7.7 | Origin and destination | White dot = origin, black dot = destination |
@@ -219,7 +221,7 @@ curl -s localhost:8000/api/rules | python3 -m json.tool
 | # | Do | Expect |
 |---|---|---|
 | 8.1 | After planning, wait 1–3 s | "Building 48-hour corridor forecast…", then a coloured overlay **only along the route corridor** |
-| 8.2 | Drag the slider from 0 to 48 | The overlay changes every hour **smoothly, with no flicker or freeze**. The label shows the date/time and "+N h" |
+| 8.2 | Drag the slider from 0 to 48 | The overlay changes every hour **smoothly, with no flicker or freeze**. Hour 0 is the **departure** hour, and the label shows the date/time and "Departure +N h" |
 | 8.3 | Press **▶** | It animates through 48 h and loops; **❚❚** pauses |
 | 8.4 | Switch **Risk / Wind / Rain / Snow** | The overlay and the legend (scale and units) change |
 | 8.5 | The yellow band on the slider track | Marks the selected route's departure → arrival window |
@@ -287,7 +289,8 @@ When everything passes, push and deploy (see `README.md` → Deploy).
 
 | Symptom | Cause / fix |
 |---|---|
-| "A data provider (open-meteo) is unavailable" | Free weather rate limit after many searches. Wait about 1 minute, or set `OPEN_METEO_API_KEY` |
+| "The free weather quota is busy right now…" | Free weather rate limit after many searches. Wait about 1 minute, then click **Try again**, or set `OPEN_METEO_API_KEY` |
+| Route cards say "road routing — truck engine unavailable" | The public Valhalla server is down or rate-limiting. The app falls back to OSRM for 5 minutes, then tries truck routing again |
 | Plan takes over 10 s | The public routing servers are slow; retry. A second identical search is cached. Intercontinental trips (for example London → Kathmandu, about 6,000 mi) take 20–40 s because of their size |
 | Map is blank | Check your internet connection (map tiles come from CARTO) |
 | Everything is "Low" | The weather really is calm. Use section 5b to find active weather |

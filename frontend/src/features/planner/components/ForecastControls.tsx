@@ -78,7 +78,7 @@ export function ForecastControls() {
             </button>
             <div className="forecast__time">
               <strong>{fmt.dateTime(time)}</strong>
-              <span>{hour === 0 ? 'Departure' : `Departure +${hour} h`}</span>
+              <span>{hour === 0 ? 'Departure hour' : `+${hour} h after departure hour`}</span>
             </div>
             <div className="slider">
               {tripWindow && <span className="slider__trip" style={{ left: `${tripWindow.left}%`, width: `${tripWindow.width}%` }} title="Selected route on the road" />}

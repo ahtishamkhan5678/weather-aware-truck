@@ -14,12 +14,12 @@ truck routing, the **hourly forecast at the moment the truck reaches each checkp
 | Requirement | Where / how |
 |---|---|
 | Inputs: origin & destination, departure date/time, load weight | `PlanForm.tsx`: Photon autocomplete (keyboard accessible), datetime picker, load in lb |
-| **3 route options** from a routing API | `providers/routing.py` `AlternativeRouteService`: Valhalla **truck** profile (gross weight sent), OSRM fallback. If an engine returns fewer than 3, extra options are synthesised with perpendicular via-points and de-duplicated by geometric overlap |
+| **3 route options** from a routing API | `providers/routing.py` `AlternativeRouteService`: Valhalla **truck** profile (gross weight sent) for **every trip length**. Long trips are chained truck legs (`providers/long_haul.py`), and OSRM is used only if the truck engine is down. If an engine returns fewer than 3, extra options are synthesised with perpendicular via-points and de-duplicated by geometric overlap |
 | Sample weather every **10 / 25 / 50 mi** at the truck's **ETA** | `domain/sampling.py` places checkpoints by driven distance; `domain/eta.py` computes the ETA at each one; `domain/weather.py` reads the forecast at that exact time |
 | Risk from the **risk/load rules** | `domain/risk.py`: thresholds and load rules are *data*; the classifier takes the worst of wind/rain/snow |
 | **Recommend** the best route (risk vs time) | `domain/ranking.py`: lexicographic order from the brief, with tolerances |
-| Map: all routes, checkpoints, risk, ETAs, summaries | `MapView.tsx`: MapLibre GL (WebGL). Routes, risk-coloured selected route, checkpoint dots with hover/click popups (ETA, wind/gust, rain, snow, level, load-rule note), on-map route summary chips |
-| Weather **heatmap** along the corridor, **0–48 h slider** | `services/heatmap.py` (corridor grid) + `lib/heatmapField.ts` (renderer) + `ForecastControls.tsx` (slider, play, Risk/Wind/Rain/Snow layers, trip-window highlight) |
+| Map: all routes, checkpoints, risk, ETAs, summaries | `MapView.tsx`: MapLibre GL (WebGL). Routes, risk-coloured selected route, checkpoint dots with **ETA labels on the map**, hover/click popups (ETA, wind/gust, rain, snow, level, load-rule note), on-map route summary chips |
+| Weather **heatmap** along the corridor, **0–48 h slider** | `domain/corridor.py` (grid sized to the corridor) + `services/heatmap.py` + `lib/heatmapField.ts` (renderer) + `ForecastControls.tsx` (slider from the **departure hour** to +48 h, play, Risk/Wind/Rain/Snow layers, trip-window highlight) |
 
 ---
 
@@ -54,7 +54,7 @@ A checkpoint's level is the **worst** of its wind, rain and snow levels. The UI 
 ### Truck ETA model
 
 - Valhalla's truck costing already models truck speeds and weight restrictions.
-- On top of that, every segment is capped at **65 mph**, which matters for OSRM car timings.
+- On top of that, every segment is capped at **65 mph**, which matters only when the OSRM fallback is used.
 - **FMCSA Hours of Service** are applied: a 30-minute break after 8 h of driving, and a 10-hour rest after 11 h. Late checkpoints on long trips are therefore sampled at the time the truck will *really* be there.
 - The 14-hour duty window and the 70-hour cycle are not modelled.
 - Speed cap, tare weight and HOS can be configured or switched off with environment variables.
@@ -125,7 +125,7 @@ frontend/ (React 19 + TS, Vite)            backend/ (Django 5 + DRF)
 | Method | Path | Purpose |
 |---|---|---|
 | `POST` | `/api/plan` | `{origin, destination, departure_time, load_weight_lb, interval_miles}` → routes, checkpoints, risk, recommendation. `origin` and `destination` accept a string (geocoded on the server) or `{label, lat, lon}` |
-| `POST` | `/api/heatmap` | `{routes: [[[lon,lat],…]], load_weight_lb}` → corridor grid with 49 hourly frames for the `risk`, `wind`, `rain` and `snow` layers |
+| `POST` | `/api/heatmap` | `{routes: [[[lon,lat],…]], load_weight_lb, departure_time?}` → corridor grid with 49 hourly frames (departure → +48 h) for the `risk`, `wind`, `rain` and `snow` layers |
 | `GET` | `/api/geocode?q=` | Autocomplete suggestions |
 | `GET` | `/api/rules` | The risk policy as data. The landing page's risk matrix renders from this |
 | `GET` | `/api/health` | Health check |
@@ -134,8 +134,8 @@ frontend/ (React 19 + TS, Vite)            backend/ (Django 5 + DRF)
 
 | Concern | Service | Notes |
 |---|---|---|
-| Truck routing | Valhalla (`valhalla1.openstreetmap.de`) | `truck` costing with gross weight. The public server is limited to about 1,500 km |
-| Long-haul routing / fallback | OSRM (`router.project-osrm.org`) | Car profile, corrected by the truck ETA model |
+| Truck routing | Valhalla (`valhalla1.openstreetmap.de`) | `truck` costing with gross weight. A single request is limited to about 1,500 km, so longer trips are chained in legs |
+| Long-haul corridors / fallback | OSRM (`router.project-osrm.org`) | Proposes long-haul corridors that are then truck-routed. Full fallback only if Valhalla is down |
 | Weather | Open-Meteo | Set `OPEN_METEO_API_KEY` for the commercial endpoint and higher limits |
 | Geocoding | Photon (OSM) | Built for type-ahead search |
 | Basemap | CARTO Dark Matter (OSM data) | |
@@ -163,8 +163,9 @@ npm run dev
 ### Tests and quality
 
 ```bash
-cd backend  && pytest && ruff check . && ruff format --check .   # 75 tests
-cd frontend && npm test && npm run lint && npm run build             # 5 tests
+cd backend  && pytest && ruff check . && ruff format --check .   # 88 tests
+cd frontend && npm test && npm run lint && npm run build             # 12 unit tests
+cd frontend && npx playwright install chromium && npm run test:e2e   # 16 end-to-end tests
 ```
 
 The backend tests cover:
@@ -174,9 +175,29 @@ The backend tests cover:
 - ranking order and tolerances
 - provider parsing
 - via-point alternatives and the fallback chain
-- the HTTP contract
+- long-haul truck-leg chaining
+- the request throttle and circuit breaker
+- the per-day weather cache and weather budget
+- the corridor grid
+- the HTTP contract, including rate-limit 503 and JSON 404
 
-The frontend tests cover heatmap interpolation and risk segmentation. CI runs everything (`.github/workflows/ci.yml`).
+The frontend unit tests cover:
+- heatmap interpolation
+- risk segmentation
+- store actions (plan → heatmap, errors, checkpoint→slider sync)
+- formatters and colour ramps
+
+The **Playwright** end-to-end tests run on desktop and a phone viewport. Every `/api` call is intercepted with deterministic fixtures, so they never depend on live weather. They cover:
+- the full flow: inputs → 3 routes → recommendation → checkpoints → heatmap
+- the case where every route is blocked by No-Travel
+- rate limit → retry
+- a 100+ checkpoint trip with no overflow
+- form validation
+- the sticky header and section highlight
+- the statement fill, counters and live risk matrix
+- no horizontal scroll
+
+CI runs all of it (`.github/workflows/ci.yml`).
 
 ---
 
@@ -196,20 +217,32 @@ docker run -p 8000:8000 -e DJANGO_SECRET_KEY=change-me -e DJANGO_ALLOWED_HOSTS='
 | `DJANGO_SECRET_KEY` | dev key | **Set in production** |
 | `DJANGO_ALLOWED_HOSTS` | `localhost,127.0.0.1,.onrender.com` | |
 | `OPEN_METEO_API_KEY` | — | Recommended for production traffic |
-| `REDIS_URL` | — | Shared cache across workers or instances |
+| `REDIS_URL` | — | Shared cache across instances |
+| `HEATMAP_MAX_NODES` | 280 | Weather lookups per heatmap. Raise it with an API key for a finer grid |
+| `VALHALLA_BASE_URL` / `OSRM_BASE_URL` | public demo servers | Point at self-hosted engines for production traffic |
+| `VALHALLA_MIN_INTERVAL_S` / `OSRM_MIN_INTERVAL_S` | 1.05 | Request spacing. Set to 0 for self-hosted engines |
 | `TRUCK_TARE_WEIGHT_LB` / `TRUCK_MAX_SPEED_MPH` / `TRUCK_APPLY_HOS` | 33000 / 65 / true | Truck model |
 
 ---
 
-## Known limitations (stated plainly)
+## Operating on free public services (how it is handled)
 
-- **Free-tier rate limits.**
-  - Open-Meteo counts every location in a request toward its free quota. A long trip at 10-mile sampling plus the heatmap uses a few hundred location-calls.
-  - Caching absorbs repeated searches, but many cold searches per minute can trigger HTTP 429. The client retries with back-off, and an API key removes the limit.
-  - The public Valhalla and OSRM demo servers are best-effort.
-- **Trips over about 930 mi** use OSRM, which has a car profile; durations are corrected with the truck speed cap and HOS. The provider is shown on every route card.
-- **Forecast horizon.** Departures are limited to the next 10 days, and a trip must finish within the 15-day horizon.
-- **US-centric copy and units** (mph, inches, lb). Routing and weather work worldwide.
+The defaults need **no API keys**. Every free service has a usage policy, and the app is built to respect it rather than hope:
+
+| Concern | What the app does |
+|---|---|
+| FOSSGIS Valhalla and OSRM demo servers allow at most **1 request/second** per client, and exceeding it gets the IP blocked | A process-wide throttle (`HostThrottle`) spaces every request at 1.05 s or more. Via-point alternatives are tried one at a time and stop as soon as 3 routes exist. Production runs **one gunicorn worker with 16 threads**, so the throttle really is global |
+| Valhalla unreachable or blocking | A circuit breaker skips it for 5 minutes and falls back to OSRM immediately, with no hanging requests. Route cards then say "road routing — truck engine unavailable" |
+| Open-Meteo free quota: 600 location-calls per minute | Each plan is capped at 260 weather points, using a finer lattice for regional trips and a coarser one, up to about 25 km, for cross-country trips. The heatmap is capped at 280 nodes. Forecasts are cached **per point per UTC day**, so plans, heatmaps and repeat searches share them |
+| Quota exhausted anyway | The API returns `503 rate_limited` with `Retry-After: 60`, and the UI shows a plain message with a **Try again** button |
+| Render free plan | Sleeps after inactivity, so the first request after idle takes about 30–60 s |
+
+For production traffic, set `OPEN_METEO_API_KEY` and point `VALHALLA_BASE_URL` / `OSRM_BASE_URL` at self-hosted engines. Then set the `*_MIN_INTERVAL_S` values to 0 and raise `HEATMAP_MAX_NODES`. No code changes are needed.
+
+Scope notes:
+- Departures are limited to the next 10 days, and a trip must finish within the 15-day forecast horizon.
+- Units are US (mph, in/hr, lb). Routing and weather work worldwide.
+- The heatmap's grid spacing on very long trips follows from the weather budget: about 0.2° for regional trips and about 0.8° for 2,000-mile trips. Raising `HEATMAP_MAX_NODES` makes it finer.
 
 ---
 
