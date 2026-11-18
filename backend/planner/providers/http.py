@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import threading
 import time
 
@@ -102,3 +103,24 @@ class CacheSlotThrottle:
             if time.monotonic() > deadline:
                 raise TimeoutError(f"Throttle wait exceeded {self._max_wait}s for {self._key}")
             time.sleep(0.05)
+
+
+class ResilientThrottle:
+    """Use the shared (Redis) throttle; if the store is unreachable, fall back to local.
+
+    A Redis outage must not take routing down: the local throttle still keeps *this*
+    instance at ≤ 1 request per interval while Redis recovers.
+    """
+
+    def __init__(self, shared: CacheSlotThrottle, local: HostThrottle) -> None:
+        self._shared = shared
+        self._local = local
+
+    def wait(self) -> None:
+        try:
+            self._shared.wait()
+        except TimeoutError:
+            raise
+        except Exception as exc:  # connection refused, auth error, timeout from the client…
+            logging.getLogger(__name__).warning("shared throttle unavailable: %s", exc)
+            self._local.wait()

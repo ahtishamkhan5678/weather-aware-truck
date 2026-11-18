@@ -11,8 +11,14 @@ from ..domain.corridor import CorridorGridBuilder
 from ..domain.eta import HoursOfService, TruckEtaModel
 from ..domain.ranking import RouteRanker
 from ..domain.risk import DEFAULT_POLICY, RiskClassifier
-from ..providers.cache import CachedRouteFinder, CachedWeatherProvider
-from ..providers.http import CacheSlotThrottle, CircuitBreaker, HostThrottle, build_session
+from ..providers.cache import CachedRouteFinder, CachedWeatherProvider, FailSafeCache
+from ..providers.http import (
+    CacheSlotThrottle,
+    CircuitBreaker,
+    HostThrottle,
+    ResilientThrottle,
+    build_session,
+)
 from ..providers.long_haul import ChainedTruckRoutingProvider
 from ..providers.open_meteo import OpenMeteoWeatherProvider
 from ..providers.osrm import OsrmRoutingProvider
@@ -31,7 +37,12 @@ def _session():
 def _throttle(key: str, interval: float):
     """Shared (Redis) throttle when a shared cache exists, else an in-process one."""
     if settings.PLANNER["SHARED_CACHE"]:
-        return CacheSlotThrottle(cache, key, interval)
+        try:
+            return ResilientThrottle(
+                CacheSlotThrottle(cache, key, interval), HostThrottle(interval)
+            )
+        except Exception:  # client could not even be created → local throttle
+            return HostThrottle(interval)
     return HostThrottle(interval)
 
 
@@ -49,7 +60,7 @@ def weather_provider():
         api_key=cfg["OPEN_METEO_API_KEY"],
         timeout_s=cfg["HTTP_TIMEOUT_S"],
     )
-    return CachedWeatherProvider(inner, cache, cfg["WEATHER_CACHE_TTL_S"])
+    return CachedWeatherProvider(inner, FailSafeCache(cache), cfg["WEATHER_CACHE_TTL_S"])
 
 
 @lru_cache(maxsize=1)
@@ -75,7 +86,7 @@ def trip_planner() -> TripPlanner:
     providers = [ChainedTruckRoutingProvider(valhalla, osrm), osrm]
     finder = CachedRouteFinder(
         AlternativeRouteService(providers, count=cfg["ROUTE_OPTIONS"]),
-        cache,
+        FailSafeCache(cache),
         cfg["ROUTE_CACHE_TTL_S"],
     )
     eta = TruckEtaModel(

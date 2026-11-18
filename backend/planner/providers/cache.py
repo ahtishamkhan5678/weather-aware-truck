@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from collections.abc import Sequence
 from datetime import datetime, timedelta
 
@@ -14,6 +15,36 @@ from ..domain.weather import ForecastSeries
 from .base import WeatherProvider
 
 DAY = timedelta(days=1)
+log = logging.getLogger(__name__)
+
+
+class FailSafeCache:
+    """Wraps a Django cache so an unreachable cache server degrades to "always miss".
+
+    Caching is an optimisation: if Redis is down, plans still work (just uncached).
+    """
+
+    def __init__(self, inner: BaseCache) -> None:
+        self._inner = inner
+
+    def _safe(self, op: str, default, *args, **kwargs):
+        try:
+            return getattr(self._inner, op)(*args, **kwargs)
+        except Exception as exc:
+            log.warning("cache %s failed, continuing without cache: %s", op, exc)
+            return default
+
+    def get(self, key, default=None):
+        return self._safe("get", default, key, default)
+
+    def get_many(self, keys):
+        return self._safe("get_many", {}, keys)
+
+    def set(self, key, value, timeout=None):
+        self._safe("set", None, key, value, timeout)
+
+    def set_many(self, data, timeout=None):
+        self._safe("set_many", [], data, timeout)
 
 
 def _day_floor(dt: datetime) -> datetime:

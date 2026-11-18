@@ -151,3 +151,34 @@ def test_cache_slot_throttle_allows_one_request_per_slot_across_instances():
     for throttle in (a, b, a, b):
         throttle.wait()
     assert time.monotonic() - t0 >= 0.1  # 4 requests need at least 3 slot boundaries
+
+
+class BrokenCache:
+    def __getattr__(self, name):
+        def fail(*a, **k):
+            raise ConnectionError("redis down")
+
+        return fail
+
+
+def test_redis_outage_degrades_to_uncached_not_errors(t0):
+    from planner.providers.cache import FailSafeCache
+
+    inner = FakeWeather()
+    provider = CachedWeatherProvider(inner, FailSafeCache(BrokenCache()), ttl_s=60)
+    out = provider.hourly([LatLon(35, -100)], t0, t0 + timedelta(hours=3))
+    assert out[0].hours == 4 and inner.calls == 1
+
+
+def test_throttle_falls_back_to_local_when_redis_down():
+    from planner.providers.http import ResilientThrottle
+
+    class BrokenShared:
+        def wait(self):
+            raise ConnectionError("redis down")
+
+    throttle = ResilientThrottle(BrokenShared(), HostThrottle(0.05))
+    t0 = time.monotonic()
+    throttle.wait()
+    throttle.wait()
+    assert time.monotonic() - t0 >= 0.05  # local spacing still enforced
